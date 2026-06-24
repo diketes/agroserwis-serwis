@@ -1,0 +1,65 @@
+{
+  "name": "agroserwis-serwis",
+  "version": "1.0.0",
+  "description": "System zleceń serwisowych — Agroserwis Nysa",
+  "main": "main.js",
+  "author": "Agroserwis Nysa",
+  "scripts": {
+    "start": "node launch.js",
+    "dist": "electron-builder --win --x64",
+    "dist-mac": "electron-builder --mac",
+    "dist-all": "electron-builder --win --mac --x64"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.2",
+    "bootstrap-icons": "^1.11.3"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.1"
+  },
+  "build": {
+    "appId": "pl.agroserwisnysa.serwis",
+    "productName": "Agroserwis Serwis",
+    "copyright": "© 2026 Agroserwis Nysa",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "node_modules/bootstrap-icons/font/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.business"
+    },
+    "dmg": {
+      "title": "Agroserwis Serwis",
+      "artifactName": "AgroserwisServis-mac.dmg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Agroserwis Serwis",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "AgroserwisServis-portable.exe"
+    }
+  }
+}

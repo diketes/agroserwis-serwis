@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Agroserwis Nysa — Serwis</title>
+  <link rel="stylesheet" href="../node_modules/bootstrap-icons/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar no-print">
+    <div class="nav-brand">
+      <i class="bi bi-tools"></i>
+      Agroserwis Nysa
+      <span class="nav-brand-sub">— Serwis</span>
+    </div>
+    <div class="nav-actions">
+      <button class="nav-btn" onclick="showView('lista')"><i class="bi bi-list-ul"></i> Zlecenia</button>
+      <button class="nav-btn primary" onclick="showView('nowe')"><i class="bi bi-plus-circle"></i> Nowe zlecenie</button>
+    </div>
+  </nav>
+
+  <!-- STATS BAR -->
+  <div id="statsBar" class="stats-bar no-print"></div>
+
+  <!-- CONTENT -->
+  <main>
+
+    <!-- VIEW: LISTA -->
+    <div id="view-lista">
+      <div class="page-header">
+        <h1>Zlecenia serwisowe</h1>
+        <div class="page-actions">
+          <div class="search-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="searchInput" placeholder="Szukaj numeru, klienta, sprzętu..." oninput="debounceLoad()">
+          </div>
+          <select id="statusFilter" class="form-select" style="width:178px" onchange="loadLista()">
+            <option value="Wszystkie">Wszystkie statusy</option>
+            <option value="Przyjęto">Przyjęto</option>
+            <option value="W naprawie">W naprawie</option>
+            <option value="Czeka na części">Czeka na części</option>
+            <option value="Gotowe">Gotowe</option>
+            <option value="Wydano">Wydano</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Numer</th>
+              <th>Klient</th>
+              <th>Sprzęt</th>
+              <th>Usterka</th>
+              <th>Status</th>
+              <th>Przyjęto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="zlecenieBody"></tbody>
+        </table>
+        <div id="emptyState" class="empty-state d-none">
+          <i class="bi bi-inbox"></i>
+          <p>Brak zleceń serwisowych</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: NOWE ZLECENIE -->
+    <div id="view-nowe" class="d-none">
+      <div class="nowe-layout">
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="bi bi-plus-circle text-green"></i> Nowe zlecenie serwisowe</h2>
+            </div>
+            <div class="card-body">
+              <form id="noweForm" onsubmit="submitNowe(event)" novalidate>
+
+                <p class="section-label">Dane klienta</p>
+                <div class="row row-4 mb-4">
+                  <div>
+                    <label>Imię i nazwisko <span class="req">*</span></label>
+                    <input type="text" class="form-control" name="klient_nazwa" required placeholder="Jan Kowalski">
+                  </div>
+                  <div>
+                    <label>Telefon</label>
+                    <input type="tel" class="form-control" name="klient_telefon" placeholder="500 000 000">
+                  </div>
+                  <div>
+                    <label>Email</label>
+                    <input type="email" class="form-control" name="klient_email" placeholder="jan@example.com">
+                  </div>
+                </div>
+
+                <p class="section-label">Sprzęt</p>
+                <div class="row row-3 mb-4">
+                  <div>
+                    <label>Marka</label>
+                    <input type="text" class="form-control" name="marka" list="marki-list" placeholder="VENOM">
+                    <datalist id="marki-list">
+                      <option value="VENOM"><option value="Honda"><option value="Stihl">
+                      <option value="Husqvarna"><option value="Kärcher"><option value="Makita"><option value="TAIA">
+                    </datalist>
+                  </div>
+                  <div>
+                    <label>Model</label>
+                    <input type="text" class="form-control" name="model" placeholder="GS-460">
+                  </div>
+                  <div>
+                    <label>Nr seryjny</label>
+                    <input type="text" class="form-control" name="nr_seryjny" placeholder="SN-00000">
+                  </div>
+                </div>
+
+                <p class="section-label">Usterka</p>
+                <div class="mb-4">
+                  <label>Opis problemu <span class="req">*</span></label>
+                  <textarea class="form-control" name="opis_usterki" rows="4" required placeholder="Opisz usterkę zgłoszoną przez klienta..."></textarea>
+                </div>
+
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Utwórz zlecenie</button>
+                  <button type="button" class="btn btn-outline" onclick="showView('lista')">Anuluj</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="numer-card">
+            <div class="text-muted fs-sm mb-2">Zostanie przypisany numer:</div>
+            <div class="num-big" id="previewNumer">ZS-2026-00001</div>
+            <div class="text-muted fs-sm mt-2"><i class="bi bi-info-circle"></i> Numer jest nadawany automatycznie</div>
+          </div>
+          <div class="card mt-3">
+            <div class="card-body" style="padding:16px 18px">
+              <div class="fw-bold fs-sm mb-2" style="color:var(--slate-700)"><i class="bi bi-lightbulb" style="color:#f59e0b"></i> Wskazówka</div>
+              <div class="text-muted fs-sm">Po utworzeniu zlecenia możesz dodawać części, koszt robocizny i zmieniać status naprawy.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: SZCZEGÓŁY (dynamic) -->
+    <div id="view-szczegoly" class="d-none"></div>
+
+  </main>
+
+  <!-- TOAST BOX -->
+  <div id="toastBox" class="toast-box no-print"></div>
+
+  <!-- DELETE MODAL -->
+  <div id="deleteModal" class="modal-overlay d-none">
+    <div class="modal-box">
+      <div class="modal-icon"><i class="bi bi-trash3-fill"></i></div>
+      <h3>Usunąć zlecenie?</h3>
+      <p>Tej operacji nie można cofnąć.</p>
+      <div class="d-flex gap-2 justify-center mt-4">
+        <button class="btn btn-danger" onclick="confirmDelete()"><i class="bi bi-trash3"></i> Usuń</button>
+        <button class="btn btn-outline" onclick="closeModal()">Anuluj</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
