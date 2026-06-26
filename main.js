@@ -389,6 +389,34 @@ async function handleApi(pathname, method, query, body, res) {
     return sendJson(res, { success: true });
   }
 
+  // ── zdjecia (mobile) ──
+  if (pathname === '/api/zdjecia' && method === 'GET') {
+    const zId2 = query.zlecenie_id ? parseInt(query.zlecenie_id) : null;
+    const lista = zId2 ? db.zdjecia.filter(z => z.zlecenie_id === zId2) : db.zdjecia;
+    return sendJson(res, lista.map(z => ({ ...z, url: `/photos/${z.filename}` })));
+  }
+  if (pathname === '/api/zdjecia' && method === 'POST') {
+    if (!body.zlecenie_id || !body.typ || !body.data) return sendJson(res, { error: 'Brak danych' }, 400);
+    const id = db.nextId.zdjecia++;
+    const ext = body.data.includes('image/png') ? '.png' : '.jpg';
+    const filename = `${body.zlecenie_id}_${body.typ}_${Date.now()}${ext}`;
+    const base64 = body.data.replace(/^data:image\/\w+;base64,/, '');
+    fs.writeFileSync(path.join(photosDir, filename), Buffer.from(base64, 'base64'));
+    db.zdjecia.push({ id, zlecenie_id: parseInt(body.zlecenie_id), typ: body.typ, filename, data_dodania: new Date().toISOString() });
+    saveDB();
+    return sendJson(res, { id, url: `/photos/${filename}` });
+  }
+  const zdjM = pathname.match(/^\/api\/zdjecia\/(\d+)$/);
+  if (zdjM && method === 'DELETE') {
+    const photo = db.zdjecia.find(z => z.id === parseInt(zdjM[1]));
+    if (photo) {
+      try { fs.unlinkSync(path.join(photosDir, photo.filename)); } catch (e) {}
+      db.zdjecia = db.zdjecia.filter(z => z.id !== photo.id);
+      saveDB();
+    }
+    return sendJson(res, { success: true });
+  }
+
   // ── sledz (publiczny tracking dla klientów) ──
   const sledzM = pathname.match(/^\/api\/sledz\/([a-f0-9]+)$/);
   if (sledzM && method === 'GET') {

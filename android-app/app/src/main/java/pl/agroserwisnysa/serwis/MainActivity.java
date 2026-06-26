@@ -4,8 +4,9 @@ import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
-import android.view.View;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -15,7 +16,6 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -25,9 +25,11 @@ public class MainActivity extends AppCompatActivity {
     static final String PREFS = "agroserwis";
     static final String KEY_URL = "server_url";
     static final int SCAN_REQUEST = 42;
+    static final int FILE_CHOOSER_REQUEST = 43;
 
     private WebView webView;
     private String serverUrl;
+    private ValueCallback<Uri[]> filePathCallback;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -70,7 +72,29 @@ public class MainActivity extends AppCompatActivity {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView wv, ValueCallback<Uri[]> filePathCb,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(null);
+                }
+                filePathCallback = filePathCb;
+
+                Intent chooser = new Intent(Intent.ACTION_GET_CONTENT);
+                chooser.addCategory(Intent.CATEGORY_OPENABLE);
+                chooser.setType("image/*");
+
+                Intent camera = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+
+                Intent picker = Intent.createChooser(chooser, "Wybierz zdjęcie");
+                picker.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+
+                startActivityForResult(picker, FILE_CHOOSER_REQUEST);
+                return true;
+            }
+        });
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
@@ -80,7 +104,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Long press header to re-scan QR
         webView.setOnLongClickListener(v -> {
             new AlertDialog.Builder(this)
                     .setTitle("Zmień serwer")
@@ -149,6 +172,21 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            if (filePathCallback == null) return;
+            Uri[] results = null;
+            if (resultCode == RESULT_OK && data != null) {
+                String dataString = data.getDataString();
+                if (dataString != null) {
+                    results = new Uri[]{Uri.parse(dataString)};
+                }
+            }
+            filePathCallback.onReceiveValue(results);
+            filePathCallback = null;
+            return;
+        }
+
         if (requestCode == SCAN_REQUEST && resultCode == RESULT_OK && data != null) {
             String url = data.getStringExtra("server_url");
             if (url != null) {

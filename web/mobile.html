@@ -95,6 +95,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .empty-icon{font-size:3rem;margin-bottom:12px}
 .loading{text-align:center;padding:40px;color:#94a3b8;font-size:.9rem}
 
+.photo-tabs{display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0}
+.photo-tab{flex:1;padding:8px;text-align:center;font-size:.82rem;font-weight:700;cursor:pointer;background:#f8fafc;color:#64748b;border:none;transition:all .15s}
+.photo-tab.active{background:#16a34a;color:#fff}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.photo-thumb{position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;background:#f1f5f9;cursor:pointer}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.photo-del{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.photo-add{border:2px dashed #cbd5e1;border-radius:8px;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:.72rem;gap:4px;background:#fafafa}
+.photo-add-icon{font-size:1.5rem}
+
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center}
+.lightbox img{max-width:95vw;max-height:90vh;border-radius:10px;object-fit:contain}
+.lightbox-close{position:absolute;top:16px;right:16px;color:#fff;font-size:2rem;cursor:pointer;line-height:1}
+
 .s-przyjeto{background:#dbeafe;color:#1d4ed8}
 .s-naprawa{background:#fef9c3;color:#854d0e}
 .s-czesci{background:#fed7aa;color:#c2410c}
@@ -280,6 +294,7 @@ async function renderSzczegoly(id) {
     : '<div style="color:#94a3b8;font-size:.85rem;padding:4px 0">Brak części</div>';
   const statusOpts = STATUSY.map(s => `<option${s===z.status?' selected':''}>${s}</option>`).join('');
 
+  _photoTyp = 'przed';
   document.getElementById('content').innerHTML = `
     <div class="section">
       <div class="section-title">Klient</div>
@@ -310,11 +325,22 @@ async function renderSzczegoly(id) {
       <div class="row"><span class="row-label" style="font-weight:800">Łącznie</span><span class="row-val" style="color:#16a34a;font-size:.95rem;font-weight:900">${kTot.toFixed(2)} zł</span></div>
       <button class="btn-outline" onclick="goSub('czesci',${z.id})">+ Zarządzaj częściami</button>
     </div>
+    <div class="section" id="photoSection">
+      <div class="section-title">Zdjęcia</div>
+      <div class="photo-tabs">
+        <button class="photo-tab active" id="ptab-przed" onclick="switchPhotoTab('przed',${z.id})">📷 Przed naprawą</button>
+        <button class="photo-tab" id="ptab-po" onclick="switchPhotoTab('po',${z.id})">✅ Po naprawie</button>
+      </div>
+      <div id="photoGrid"></div>
+    </div>
     <div style="padding:12px">
       <button class="btn-outline" onclick="goSub('edytuj',${z.id})">✏ Edytuj dane zlecenia</button>
       <button class="btn-danger" onclick="usunZlecenie(${z.id})">🗑 Usuń zlecenie</button>
     </div>
-    <div style="height:16px"></div>`;
+    <div style="height:16px"></div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="onPhotoChosen(event)">
+    <div id="lightbox" class="lightbox" style="display:none" onclick="closeLightbox()"><span class="lightbox-close">✕</span><img id="lightboxImg" src=""></div>`;
+  loadPhotos(id);
 }
 
 function goSub(v, id) { stack.push('szczegoly'); view = v; zlecenieId = id; render(); }
@@ -654,6 +680,97 @@ async function dodajMechanika() {
     toast('Mechanik dodany ✓');
     goBack();
   }
+}
+
+// ─── ZDJĘCIA ─────────────────────────────────────────────────────────────────
+
+let _photoZId = null;
+let _photoTyp = 'przed';
+let _allPhotos = [];
+
+async function loadPhotos(zId) {
+  _photoZId = zId;
+  _allPhotos = await api('GET', `/api/zdjecia?zlecenie_id=${zId}`).catch(() => []);
+  renderPhotoGrid();
+}
+
+function switchPhotoTab(typ, zId) {
+  _photoTyp = typ;
+  document.querySelectorAll('.photo-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('ptab-' + typ)?.classList.add('active');
+  _photoZId = zId;
+  renderPhotoGrid();
+}
+
+function renderPhotoGrid() {
+  const grid = document.getElementById('photoGrid');
+  if (!grid) return;
+  const filtered = _allPhotos.filter(p => p.typ === _photoTyp);
+  const base = location.origin;
+  let html = filtered.map(p => `
+    <div class="photo-thumb" onclick="openLightbox('${base}${p.url}')">
+      <img src="${base}${p.url}" loading="lazy">
+      <button class="photo-del" onclick="event.stopPropagation();usunZdjecie(${p.id})">✕</button>
+    </div>`).join('');
+  html += `<div class="photo-add" onclick="addPhoto()"><div class="photo-add-icon">📷</div><span>Dodaj</span></div>`;
+  grid.innerHTML = `<div class="photo-grid">${html}</div>`;
+}
+
+function addPhoto() {
+  const inp = document.getElementById('photoInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function onPhotoChosen(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const data = e.target.result;
+    const compressedData = await compressImage(data, 1200, 0.82);
+    toast('Wysyłanie...');
+    try {
+      await api('POST', '/api/zdjecia', { zlecenie_id: _photoZId, typ: _photoTyp, data: compressedData });
+      _allPhotos = await api('GET', `/api/zdjecia?zlecenie_id=${_photoZId}`);
+      renderPhotoGrid();
+      toast('Zdjęcie dodane ✓');
+    } catch(e) { toast('Błąd wysyłania'); }
+  };
+  reader.readAsDataURL(file);
+}
+
+function compressImage(dataUrl, maxSize, quality) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+
+async function usunZdjecie(id) {
+  if (!confirm('Usunąć to zdjęcie?')) return;
+  await api('DELETE', `/api/zdjecia/${id}`);
+  _allPhotos = _allPhotos.filter(p => p.id !== id);
+  renderPhotoGrid();
+  toast('Usunięto');
+}
+
+function openLightbox(url) {
+  document.getElementById('lightboxImg').src = url;
+  document.getElementById('lightbox').style.display = 'flex';
+}
+function closeLightbox() {
+  document.getElementById('lightbox').style.display = 'none';
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
