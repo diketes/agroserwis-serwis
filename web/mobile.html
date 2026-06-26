@@ -102,8 +102,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .photo-thumb{position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;background:#f1f5f9;cursor:pointer}
 .photo-thumb img{width:100%;height:100%;object-fit:cover}
 .photo-del{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
-.photo-add{border:2px dashed #cbd5e1;border-radius:8px;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:.72rem;gap:4px;background:#fafafa;position:relative;overflow:hidden}
-.photo-add input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.photo-add{border:2px dashed #cbd5e1;border-radius:8px;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:.72rem;gap:4px;background:#fafafa;position:relative}
+.photo-add input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:5;-webkit-appearance:none}
 .photo-add-icon{font-size:1.5rem}
 
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center}
@@ -164,8 +164,10 @@ let zlecenieId = null;
 let mechanicy = [];
 let selMechId = null;
 let filterStatus = 'Wszystkie';
+let filterMoje = false;
 let search = '';
 let stack = [];
+let currentMech = null; // zalogowany mechanik
 
 async function api(method, path, body) {
   const opts = { method, headers: {'Content-Type':'application/json'}, cache: 'no-store' };
@@ -234,10 +236,62 @@ function render() {
   (map[view] || renderLista)();
 }
 
+// ─── WYBÓR MECHANIKA (LOGIN) ──────────────────────────────────────────────────
+
+function renderLogin() {
+  document.getElementById('bottomnav').style.display = 'none';
+  document.getElementById('backBtn').style.display = 'none';
+  document.getElementById('topbarTitle').textContent = 'Agroserwis Serwis';
+  document.getElementById('topbarSub').textContent = 'Wybierz swoje konto';
+  const c = document.getElementById('content');
+  if (!mechanicy.length) {
+    c.innerHTML = `<div class="empty"><div class="empty-icon">👷</div><div style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:8px">Brak mechaników</div><div style="font-size:.85rem">Zaloguj się jako administrator</div><div style="padding:24px 20px 0"><button class="btn-green" onclick="loginAsAdmin()">Wejdź jako admin</button></div></div>`;
+    return;
+  }
+  const cards = mechanicy.map(m => `
+    <div onclick="loginAs(${m.id})" style="background:#fff;border-radius:16px;padding:18px 20px;margin:0 12px 10px;box-shadow:0 1px 6px rgba(0,0,0,.09);display:flex;align-items:center;gap:14px;cursor:pointer;transition:transform .1s;active-transform:scale(.97)">
+      <div style="width:48px;height:48px;border-radius:50%;background:${m.kolor||'#16a34a'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;font-weight:900;flex-shrink:0">${(m.nazwa||'?')[0].toUpperCase()}</div>
+      <div style="flex:1"><div style="font-size:1rem;font-weight:800;color:#1e293b">${m.nazwa}</div><div style="font-size:.78rem;color:#94a3b8;margin-top:2px">Mechanik</div></div>
+      <div style="color:#cbd5e1;font-size:1.4rem">›</div>
+    </div>`).join('');
+  c.innerHTML = `
+    <div style="padding:24px 0 10px;text-align:center;color:#64748b;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Wybierz konto</div>
+    ${cards}
+    <div style="padding:10px 12px 0"><button class="btn-gray" onclick="loginAsAdmin()">🔧 Wejdź jako administrator</button></div>
+    <div style="height:24px"></div>`;
+}
+
+function loginAs(mechId) {
+  const m = mechanicy.find(x => x.id === mechId);
+  if (!m) return;
+  currentMech = m;
+  localStorage.setItem('currentMechId', String(mechId));
+  filterMoje = true;
+  document.getElementById('bottomnav').style.display = 'flex';
+  nav('lista');
+}
+
+function loginAsAdmin() {
+  currentMech = null;
+  localStorage.removeItem('currentMechId');
+  filterMoje = false;
+  document.getElementById('bottomnav').style.display = 'flex';
+  nav('lista');
+}
+
+function wyloguj() {
+  currentMech = null;
+  localStorage.removeItem('currentMechId');
+  filterMoje = false;
+  mechanicy = [];
+  init();
+}
+
 // ─── LISTA ────────────────────────────────────────────────────────────────────
 
 async function renderLista() {
-  setTop('Zlecenia','Lista zleceń',false);
+  const sub = currentMech ? currentMech.nazwa : 'Administrator';
+  setTop('Zlecenia', sub, false);
   const c = document.getElementById('content');
   c.innerHTML = `
     <div class="search-wrap">
@@ -247,11 +301,20 @@ async function renderLista() {
     <div id="li"><div class="loading">Ładowanie...</div></div>`;
   document.getElementById('si').addEventListener('input', e => { search = e.target.value; loadLista(); });
   const fs = document.getElementById('fs');
+
+  if (currentMech) {
+    const bMoje = document.createElement('button');
+    bMoje.className = 'chip' + (filterMoje ? ' active' : '');
+    bMoje.textContent = '👤 Moje';
+    bMoje.onclick = () => { filterMoje = !filterMoje; bMoje.classList.toggle('active', filterMoje); loadLista(); };
+    fs.appendChild(bMoje);
+  }
+
   ['Wszystkie','Przyjęto','W naprawie','Czeka na części','Gotowe','Wydano'].forEach(s => {
     const b = document.createElement('button');
     b.className = 'chip'+(s===filterStatus?' active':'');
     b.textContent = s;
-    b.onclick = () => { filterStatus = s; fs.querySelectorAll('.chip').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadLista(); };
+    b.onclick = () => { filterStatus = s; fs.querySelectorAll('.chip:not(:first-child)').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadLista(); };
     fs.appendChild(b);
   });
   loadLista();
@@ -261,15 +324,18 @@ async function loadLista() {
   const p = new URLSearchParams();
   if (filterStatus !== 'Wszystkie') p.set('status', filterStatus);
   if (search) p.set('szukaj', search);
+  if (filterMoje && currentMech) p.set('mechanik_id', currentMech.id);
   const data = await api('GET', `/api/zlecenia?${p}`);
   const c = document.getElementById('li');
   if (!data.length) { c.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>Brak zleceń</div>`; return; }
   c.innerHTML = data.map(z => {
     const sp = [z.marka,z.model].filter(Boolean).join(' ')||'—';
+    const mech = mechanicy.find(m => m.id === z.mechanik_id);
+    const mechDot = mech ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${mech.kolor||'#16a34a'};margin-right:4px"></span>${mech.nazwa}` : '';
     return `<div class="card" onclick="nav('szczegoly',${z.id})">
       <div class="card-top"><span class="card-numer">${z.numer}</span>${badge(z.status)}</div>
       <div class="card-klient">${z.klient_nazwa||'—'}</div>
-      <div class="card-sprzet">${sp}</div>
+      <div class="card-sprzet">${sp}${mechDot ? `<span style="margin-left:8px;font-size:.7rem;color:#94a3b8">${mechDot}</span>` : ''}</div>
       <div class="card-date">${fmt(z.data_przyjecia)}</div>
     </div>`;
   }).join('')+'<div style="height:14px"></div>';
@@ -546,9 +612,22 @@ async function renderStat() {
 async function renderUstawienia() {
   setTop('Ustawienia','',false);
   const s = await api('GET','/api/settings').catch(()=>({}));
-  const smtpOk = !!(s.smtp_user && s.smtp_pass);
+  const smtpOk = !!(s.smtp_user);
+  const mechLabel = currentMech
+    ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${currentMech.kolor||'#16a34a'};margin-right:5px;vertical-align:middle"></span>${currentMech.nazwa}`
+    : 'Administrator';
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-top:12px">
+      <div class="settings-item" onclick="wyloguj()">
+        <div class="settings-item-icon">👤</div>
+        <div class="settings-item-info">
+          <div class="settings-item-title">Zalogowany jako</div>
+          <div class="settings-item-sub">${mechLabel} · <span style="color:#ef4444">Zmień konto</span></div>
+        </div>
+        <div class="settings-item-arrow">›</div>
+      </div>
+    </div>
+    <div class="section">
       <div class="settings-item" onclick="nav('smtp')">
         <div class="settings-item-icon">📧</div>
         <div class="settings-item-info">
@@ -575,11 +654,12 @@ async function renderUstawienia() {
 async function renderSmtp() {
   setTop('Ustawienia e-mail','',true);
   const s = await api('GET','/api/settings').catch(()=>({}));
+  const passSet = !!(s && s.smtp_user);
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-top:12px">
       <div class="section-title">Konto Gmail</div>
       <div class="field"><label>Adres e-mail</label><input id="s-user" type="email" value="${esc(s.smtp_user)}" placeholder="twoj@gmail.com"></div>
-      <div class="field"><label>Hasło aplikacji (App Password)</label><input id="s-pass" type="password" value="${esc(s.smtp_pass)}" placeholder="16-znakowe hasło z Google"></div>
+      <div class="field"><label>Hasło aplikacji (App Password)</label><input id="s-pass" type="password" value="" placeholder="${passSet ? '●●●●●●●●●●●●●●●● (pozostaw puste, by nie zmieniać)' : '16-znakowe hasło z Google'}"></div>
     </div>
     <div class="section">
       <div class="section-title">Serwer SMTP</div>
@@ -598,14 +678,19 @@ async function renderSmtp() {
 }
 
 async function zapiszSmtp() {
-  await api('PUT','/api/settings',{
-    smtp_user: v('s-user'), smtp_pass: v('s-pass'),
-    smtp_host: v('s-host')||'smtp.gmail.com',
-    smtp_port: parseInt(document.getElementById('s-port').value)||587,
+  const data = {
+    smtp_user: v('s-user'),
+    smtp_host: v('s-host') || 'smtp.gmail.com',
+    smtp_port: parseInt(document.getElementById('s-port').value) || 587,
     public_url: v('s-url'),
-  });
-  toast('Zapisano ✓');
-  goBack();
+  };
+  const pass = v('s-pass');
+  if (pass) data.smtp_pass = pass;
+  try {
+    await api('PUT', '/api/settings', data);
+    toast('Zapisano ✓');
+    goBack();
+  } catch(e) { toast('Błąd zapisu: ' + e.message); }
 }
 
 // ─── MECHANICY EDIT ───────────────────────────────────────────────────────────
@@ -775,10 +860,24 @@ function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
-(async () => {
+async function init() {
   mechanicy = await api('GET','/api/mechanicy').catch(()=>[]);
-  render();
-})();
+  const savedId = localStorage.getItem('currentMechId');
+  if (savedId) {
+    const m = mechanicy.find(x => x.id === parseInt(savedId));
+    if (m) {
+      currentMech = m;
+      filterMoje = true;
+      document.getElementById('bottomnav').style.display = 'flex';
+      render();
+      return;
+    }
+  }
+  // brak zapisanego konta — pokaż ekran wyboru
+  renderLogin();
+}
+
+init();
 </script>
 </body>
 </html>
