@@ -2,168 +2,274 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agroserwis Nysa — Serwis</title>
-  <link rel="stylesheet" href="../node_modules/bootstrap-icons/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <nav class="navbar no-print">
-    <div class="nav-brand">
-      <i class="bi bi-tools"></i>
-      Agroserwis Nysa
-      <span class="nav-brand-sub">— Serwis</span>
+  <!-- PICKER SCREEN -->
+  <div id="pickerScreen" class="screen active">
+    <div class="picker-header">
+      <div class="picker-greeting">Agroserwis Nysa — System Serwisowy</div>
+      <div class="picker-headline">Kto pracuje?</div>
     </div>
-    <div class="nav-actions">
-      <button class="nav-btn" onclick="showView('lista')"><i class="bi bi-list-ul"></i> Zlecenia</button>
-      <button class="nav-btn primary" onclick="showView('nowe')"><i class="bi bi-plus-circle"></i> Nowe zlecenie</button>
+    <div id="pickerGrid" class="picker-grid"></div>
+    <div class="picker-footer">
+      <button class="btn-ghost-picker" onclick="selectMechanik(null)">🛡 Widok wszystkich zleceń</button>
     </div>
-  </nav>
+  </div>
 
-  <!-- STATS BAR -->
-  <div id="statsBar" class="stats-bar no-print"></div>
+  <!-- MAIN APP -->
+  <div id="mainScreen" class="screen">
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-logo">⚙</div>
+        <div>
+          <div class="brand-name">Agroserwis Nysa</div>
+          <div class="brand-sub">System Serwisowy</div>
+        </div>
+      </div>
 
-  <!-- CONTENT -->
-  <main>
+      <nav class="top-nav">
+        <button class="nav-tab" id="nav-lista" onclick="navigate('lista')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+          </svg>
+          Zlecenia
+        </button>
+        <button class="nav-tab" id="nav-mechanicy" onclick="navigate('mechanicy')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M15 14s1 0 1-1-1-4-5-4-5 3-5 4 1 1 1 1h8zm-7.978-1A.261.261 0 0 1 7 12.996c.001-.264.167-1.03.76-1.72C8.312 10.629 9.282 10 11 10c1.717 0 2.687.63 3.24 1.276.593.69.758 1.457.76 1.72l-.008.002-.014.002H7.022zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm3-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM6.936 9.28a5.88 5.88 0 0 0-1.23-.247A7.35 7.35 0 0 0 5 9c-4 0-5 3-5 4 0 .667.333 1 1 1h4.216A2.238 2.238 0 0 1 5 13c0-1.01.377-2.042 1.09-2.904.243-.294.526-.569.846-.816zM4.92 10A5.493 5.493 0 0 0 4 13H1c0-.26.164-1.03.76-1.724.545-.636 1.492-1.256 3.16-1.275zM1.5 5.5a3 3 0 1 1 6 0 3 3 0 0 1-6 0zm3-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+          </svg>
+          Mechanicy
+        </button>
+      </nav>
 
-    <!-- VIEW: LISTA -->
-    <div id="view-lista">
-      <div class="page-header">
-        <h1>Zlecenia serwisowe</h1>
-        <div class="page-actions">
-          <div class="search-wrap">
-            <i class="bi bi-search"></i>
-            <input type="text" id="searchInput" placeholder="Szukaj numeru, klienta, sprzętu..." oninput="debounceLoad()">
+      <div class="header-actions">
+        <button class="btn-nowe" onclick="navigate('nowe')">+ Nowe zlecenie</button>
+        <button class="btn-icon-hdr" onclick="openPhoneModal()" title="Połącz telefon">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6zM5 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H5z"/>
+            <path d="M8 14a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+          </svg>
+        </button>
+        <button class="btn-icon-hdr" onclick="openSettings()" title="Ustawienia e-mail">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+            <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.474l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+          </svg>
+        </button>
+        <button class="btn-mechanic" id="mechBtn" onclick="goToPicker()">
+          <span class="mech-dot" id="mechDot" style="background:#64748b"></span>
+          <span id="mechName">Wszyscy</span>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="opacity:.5">
+            <path d="M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="content" class="content"></div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toastBox"></div>
+
+  <!-- PHONE MODAL -->
+  <div id="phoneModal" class="modal-overlay d-none" onclick="if(event.target===this)closePhoneModal()">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">📱 Połącz telefon</div>
+        <button class="btn-close-modal" onclick="closePhoneModal()">×</button>
+      </div>
+      <div id="phoneQR" style="display:flex;justify-content:center;margin:20px 0 12px"></div>
+      <div style="text-align:center;font-size:.75rem;color:var(--slate-400);margin-bottom:6px">lub wpisz ręcznie w telefonie:</div>
+      <div id="phoneUrl" style="text-align:center;font-family:monospace;font-size:1rem;font-weight:800;color:var(--green-600);padding:10px;background:var(--slate-50);border-radius:10px"></div>
+      <div style="margin-top:12px;font-size:.75rem;color:var(--slate-400);text-align:center">Oba urządzenia muszą być w tej samej sieci WiFi</div>
+    </div>
+  </div>
+
+  <!-- CONFIRM DIALOG -->
+  <div id="confirmDialog" class="modal-overlay d-none" onclick="if(event.target===this)confirmCancel()">
+    <div class="modal-box" style="max-width:380px">
+      <div class="modal-title" style="margin-bottom:10px">Potwierdź operację</div>
+      <div id="confirmText" style="color:var(--slate-600);font-size:.92rem;margin-bottom:22px">Czy na pewno?</div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-secondary" style="flex:1" onclick="confirmCancel()">Anuluj</button>
+        <button class="btn btn-danger" style="flex:1" id="confirmOk">Usuń</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD MECHANIC FROM PICKER -->
+  <div id="addMechanikDialog" class="modal-overlay d-none" onclick="if(event.target===this)closeAddMechanik()">
+    <div class="modal-box" style="max-width:400px">
+      <div class="modal-header">
+        <div class="modal-title">Dodaj mechanika</div>
+        <button class="btn-close-modal" onclick="closeAddMechanik()">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Imię i nazwisko</label>
+        <input class="form-control" id="am-nazwa" placeholder="Jan Kowalski"
+          onkeydown="if(event.key==='Enter')dodajMechanikaPicker()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Kolor</label>
+        <div id="amKolorPicker" class="kolor-picker"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="dodajMechanikaPicker()">Dodaj i zaloguj →</button>
+    </div>
+  </div>
+
+  <!-- CAMERA MODAL -->
+  <div id="cameraModal" class="modal-overlay d-none">
+    <div class="modal-box" style="max-width:600px">
+      <div class="modal-header">
+        <div class="modal-title" id="cameraTitle">📷 Zrób zdjęcie</div>
+        <button class="btn-close-modal" onclick="closeCameraModal()">×</button>
+      </div>
+      <div class="camera-wrap">
+        <video id="cameraVideo" autoplay playsinline muted></video>
+        <canvas id="cameraCanvas" style="display:none"></canvas>
+        <div id="cameraPreview" class="camera-preview d-none">
+          <img id="cameraPreviewImg" alt="Podgląd zdjęcia">
+        </div>
+      </div>
+      <div class="camera-actions">
+        <button class="btn btn-secondary" onclick="closeCameraModal()">Anuluj</button>
+        <button class="btn btn-outline" id="cameraSwitchBtn" onclick="retakePhoto()" style="display:none">↩ Ponów</button>
+        <button class="btn btn-primary" id="cameraShootBtn" onclick="capturePhoto()">📸 Zrób zdjęcie</button>
+        <button class="btn btn-primary" id="cameraSaveBtn" onclick="savePhoto()" style="display:none">✓ Zapisz zdjęcie</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHTBOX -->
+  <div id="lightbox" class="d-none" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">×</button>
+    <img id="lightboxImg" alt="">
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settingsModal" class="modal-overlay d-none" onclick="if(event.target===this)closeSettings()">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-header">
+        <div class="modal-title">⚙ Ustawienia e-mail</div>
+        <button class="btn-close-modal" onclick="closeSettings()">×</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Konto SMTP (wysyłka e-maili)</div>
+        <div class="settings-hint">
+          Dla Gmail: włącz weryfikację dwuetapową, wejdź w
+          <strong>Konto Google → Bezpieczeństwo → Hasła do aplikacji</strong>
+          i wygeneruj hasło dla "Poczta".
+        </div>
+        <div class="settings-row">
+          <div class="form-group" style="flex:3">
+            <label class="form-label">Adres e-mail (login SMTP)</label>
+            <input class="form-control" id="set-smtp-user" type="email" placeholder="twojmail@gmail.com">
           </div>
-          <select id="statusFilter" class="form-select" style="width:178px" onchange="loadLista()">
-            <option value="Wszystkie">Wszystkie statusy</option>
-            <option value="Przyjęto">Przyjęto</option>
-            <option value="W naprawie">W naprawie</option>
-            <option value="Czeka na części">Czeka na części</option>
-            <option value="Gotowe">Gotowe</option>
-            <option value="Wydano">Wydano</option>
+          <div class="form-group" style="flex:1.4">
+            <label class="form-label">Port</label>
+            <input class="form-control" id="set-smtp-port" type="number" value="587">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hasło aplikacji</label>
+          <input class="form-control" id="set-smtp-pass" type="password" placeholder="xxxx xxxx xxxx xxxx">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Serwer SMTP (domyślnie Gmail)</label>
+          <input class="form-control" id="set-smtp-host" placeholder="smtp.gmail.com">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Publiczny adres serwera</div>
+        <div class="settings-hint">
+          Link w e-mailu musi być dostępny z internetu. Zostaw puste jeśli klienci są w tej samej sieci co komputer warsztatu (lokalny adres IP). Jeśli chcesz dostęp z zewnątrz — wpisz publiczne IP lub domenę, np. <code>http://1.2.3.4:3737</code>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Publiczny URL (opcjonalnie)</label>
+          <input class="form-control" id="set-public-url" placeholder="http://1.2.3.4:3737">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Integracja Apilo</div>
+        <div class="settings-hint">
+          Pozwala importować dane klienta z zamówień Allegro/marketplace podczas przyjmowania reklamacji.
+          Klucze znajdziesz w panelu Apilo: <strong>Administracja → Klucze API Apilo</strong>.
+        </div>
+        <div id="apiloStatusBar" style="display:none;align-items:center;gap:8px;margin-bottom:10px;font-size:.82rem;padding:8px 12px;border-radius:8px;background:#dcfce7;color:#15803d">
+          <span>✅</span><span id="apiloStatusText">Połączono</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL sklepu Apilo</label>
+          <input class="form-control" id="set-apilo-url" placeholder="https://twojsklep.apilo.com">
+        </div>
+        <div class="settings-row">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Client ID</label>
+            <input class="form-control" id="set-apilo-id" placeholder="Client ID">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Client Secret</label>
+            <input class="form-control" id="set-apilo-secret" type="password" placeholder="Client Secret">
+          </div>
+        </div>
+        <div class="settings-hint" style="margin-bottom:8px">
+          Jednorazowo: wygeneruj <strong>Kod autoryzacyjny</strong> w Apilo (Klucze API → Generuj kod) i wpisz poniżej.
+          Po połączeniu token odświeża się automatycznie.
+        </div>
+        <div class="settings-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:1;margin-bottom:0">
+            <label class="form-label">Kod autoryzacyjny (jednorazowy)</label>
+            <input class="form-control" id="set-apilo-authcode" placeholder="Wklej kod tutaj">
+          </div>
+          <button class="btn btn-outline btn-sm" style="margin-bottom:0;white-space:nowrap" onclick="polaczApilo()">🔗 Połącz</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeSettings()">Anuluj</button>
+        <button class="btn btn-outline btn-sm" style="flex:1" onclick="testEmail()">📧 Wyślij testowy</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveSettings()">✓ Zapisz</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAPORT MODAL -->
+  <div id="raportModal" class="modal-overlay d-none" onclick="if(event.target===this)closeRaport()">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-header">
+        <div class="modal-title">📊 Raport miesięczny</div>
+        <button class="btn-close-modal" onclick="closeRaport()">×</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:flex-end">
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label class="form-label">Miesiąc</label>
+          <select class="form-control" id="r-miesiac">
+            <option value="1">Styczeń</option><option value="2">Luty</option>
+            <option value="3">Marzec</option><option value="4">Kwiecień</option>
+            <option value="5">Maj</option><option value="6">Czerwiec</option>
+            <option value="7">Lipiec</option><option value="8">Sierpień</option>
+            <option value="9">Wrzesień</option><option value="10">Październik</option>
+            <option value="11">Listopad</option><option value="12">Grudzień</option>
           </select>
         </div>
-      </div>
-
-      <div class="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Numer</th>
-              <th>Klient</th>
-              <th>Sprzęt</th>
-              <th>Usterka</th>
-              <th>Status</th>
-              <th>Przyjęto</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="zlecenieBody"></tbody>
-        </table>
-        <div id="emptyState" class="empty-state d-none">
-          <i class="bi bi-inbox"></i>
-          <p>Brak zleceń serwisowych</p>
+        <div class="form-group" style="width:100px;margin-bottom:0">
+          <label class="form-label">Rok</label>
+          <input class="form-control" id="r-rok" type="number" value="2026">
         </div>
+        <button class="btn btn-primary btn-sm" onclick="generujRaport()">Generuj</button>
       </div>
-    </div>
-
-    <!-- VIEW: NOWE ZLECENIE -->
-    <div id="view-nowe" class="d-none">
-      <div class="nowe-layout">
-        <div>
-          <div class="card">
-            <div class="card-header">
-              <h2><i class="bi bi-plus-circle text-green"></i> Nowe zlecenie serwisowe</h2>
-            </div>
-            <div class="card-body">
-              <form id="noweForm" onsubmit="submitNowe(event)" novalidate>
-
-                <p class="section-label">Dane klienta</p>
-                <div class="row row-4 mb-4">
-                  <div>
-                    <label>Imię i nazwisko <span class="req">*</span></label>
-                    <input type="text" class="form-control" name="klient_nazwa" required placeholder="Jan Kowalski">
-                  </div>
-                  <div>
-                    <label>Telefon</label>
-                    <input type="tel" class="form-control" name="klient_telefon" placeholder="500 000 000">
-                  </div>
-                  <div>
-                    <label>Email</label>
-                    <input type="email" class="form-control" name="klient_email" placeholder="jan@example.com">
-                  </div>
-                </div>
-
-                <p class="section-label">Sprzęt</p>
-                <div class="row row-3 mb-4">
-                  <div>
-                    <label>Marka</label>
-                    <input type="text" class="form-control" name="marka" list="marki-list" placeholder="VENOM">
-                    <datalist id="marki-list">
-                      <option value="VENOM"><option value="Honda"><option value="Stihl">
-                      <option value="Husqvarna"><option value="Kärcher"><option value="Makita"><option value="TAIA">
-                    </datalist>
-                  </div>
-                  <div>
-                    <label>Model</label>
-                    <input type="text" class="form-control" name="model" placeholder="GS-460">
-                  </div>
-                  <div>
-                    <label>Nr seryjny</label>
-                    <input type="text" class="form-control" name="nr_seryjny" placeholder="SN-00000">
-                  </div>
-                </div>
-
-                <p class="section-label">Usterka</p>
-                <div class="mb-4">
-                  <label>Opis problemu <span class="req">*</span></label>
-                  <textarea class="form-control" name="opis_usterki" rows="4" required placeholder="Opisz usterkę zgłoszoną przez klienta..."></textarea>
-                </div>
-
-                <div class="d-flex gap-2">
-                  <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Utwórz zlecenie</button>
-                  <button type="button" class="btn btn-outline" onclick="showView('lista')">Anuluj</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div class="numer-card">
-            <div class="text-muted fs-sm mb-2">Zostanie przypisany numer:</div>
-            <div class="num-big" id="previewNumer">ZS-2026-00001</div>
-            <div class="text-muted fs-sm mt-2"><i class="bi bi-info-circle"></i> Numer jest nadawany automatycznie</div>
-          </div>
-          <div class="card mt-3">
-            <div class="card-body" style="padding:16px 18px">
-              <div class="fw-bold fs-sm mb-2" style="color:var(--slate-700)"><i class="bi bi-lightbulb" style="color:#f59e0b"></i> Wskazówka</div>
-              <div class="text-muted fs-sm">Po utworzeniu zlecenia możesz dodawać części, koszt robocizny i zmieniać status naprawy.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- VIEW: SZCZEGÓŁY (dynamic) -->
-    <div id="view-szczegoly" class="d-none"></div>
-
-  </main>
-
-  <!-- TOAST BOX -->
-  <div id="toastBox" class="toast-box no-print"></div>
-
-  <!-- DELETE MODAL -->
-  <div id="deleteModal" class="modal-overlay d-none">
-    <div class="modal-box">
-      <div class="modal-icon"><i class="bi bi-trash3-fill"></i></div>
-      <h3>Usunąć zlecenie?</h3>
-      <p>Tej operacji nie można cofnąć.</p>
-      <div class="d-flex gap-2 justify-center mt-4">
-        <button class="btn btn-danger" onclick="confirmDelete()"><i class="bi bi-trash3"></i> Usuń</button>
-        <button class="btn btn-outline" onclick="closeModal()">Anuluj</button>
+      <div id="raportContent"></div>
+      <div style="display:flex;gap:10px;margin-top:14px" id="raportActions" style="display:none">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeRaport()">Zamknij</button>
+        <button class="btn btn-primary" style="flex:1" id="raportPrintBtn" onclick="drukujRaport()" style="display:none">🖨 Drukuj PDF</button>
       </div>
     </div>
   </div>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#16a34a">
+  <title>Agroserwis — Serwis</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- EKRAN POŁĄCZENIA -->
+  <div id="setupScreen" class="screen active">
+    <div class="setup-logo">
+      <div class="setup-logo-fallback">🔧</div>
+    </div>
+    <div class="setup-title">Agroserwis Nysa</div>
+    <div class="setup-sub">System Serwisowy</div>
+    <div class="setup-card">
+      <div class="setup-card-label">Adres IP komputera</div>
+      <div class="setup-input-wrap">
+        <input id="serverIP" class="setup-input" type="text" inputmode="decimal"
+          placeholder="np. 192.168.1.100" autocomplete="off"
+          onkeydown="if(event.key==='Enter')connect()">
+        <button class="btn-connect" onclick="connect()">Połącz</button>
+      </div>
+      <div id="connectErr" class="setup-err"></div>
+      <div class="setup-hint">Oba urządzenia muszą być w tej samej sieci WiFi.<br>Adres IP znajdziesz klikając 📱 w aplikacji na komputerze.</div>
+    </div>
+  </div>
+
+  <!-- WYBÓR MECHANIKA -->
+  <div id="pickerScreen" class="screen">
+    <div class="picker-header">
+      <div class="picker-greeting">Agroserwis Nysa</div>
+      <div class="picker-headline">Kto pracuje?</div>
+    </div>
+    <div id="pickerGrid" class="picker-grid"></div>
+    <div style="text-align:center;padding:0 18px 16px">
+      <button onclick="selectMechanik(null)" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);border-radius:12px;padding:10px 20px;font-size:.82rem;font-weight:700;cursor:pointer">
+        Widok wszystkich zleceń
+      </button>
+    </div>
+    <div style="text-align:center;padding:0 18px max(16px, env(safe-area-inset-bottom))">
+      <button onclick="changeServer()" style="background:none;border:none;color:rgba(255,255,255,.3);font-size:.75rem;cursor:pointer">
+        ⚙ Zmień połączenie
+      </button>
+    </div>
+  </div>
+
+  <!-- GŁÓWNA APLIKACJA -->
+  <div id="mainScreen" class="screen">
+    <header class="app-header">
+      <button id="btnBack" class="btn-back" onclick="goBack()" style="display:none">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor">
+          <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+        </svg>
+      </button>
+      <div id="headerTitle" class="header-title">Zlecenia</div>
+      <div id="onlineIndicator" class="online-indicator" title="Sprawdzam połączenie..."></div>
+      <button id="mechBtn" class="mech-btn" onclick="goToPicker()">
+        <span class="mech-dot" style="background:#64748b"></span>Wszystkie
+      </button>
+    </header>
+
+    <div id="content" class="content-scroll"></div>
+
+    <nav class="bottom-nav">
+      <button class="bnav-item active" id="bnav-lista" onclick="navigate('lista')">
+        <div class="bnav-icon">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+            <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+          </svg>
+        </div>
+        Zlecenia
+      </button>
+      <button class="bnav-add" onclick="navigate('nowe')" id="bnav-nowe">
+        <svg width="26" height="26" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+        </svg>
+      </button>
+      <button class="bnav-item" id="bnav-mechanicy" onclick="navigate('mechanicy')">
+        <div class="bnav-icon">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M15 14s1 0 1-1-1-4-5-4-5 3-5 4 1 1 1 1h8zm-7.978-1A.261.261 0 0 1 7 12.996c.001-.264.167-1.03.76-1.72C8.312 10.629 9.282 10 11 10c1.717 0 2.687.63 3.24 1.276.593.69.758 1.457.76 1.72l-.008.002-.014.002H7.022zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm3-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM6.936 9.28a5.88 5.88 0 0 0-1.23-.247A7.35 7.35 0 0 0 5 9c-4 0-5 3-5 4 0 .667.333 1 1 1h4.216A2.238 2.238 0 0 1 5 13c0-1.01.377-2.042 1.09-2.904.243-.294.526-.569.846-.816zM4.92 10A5.493 5.493 0 0 0 4 13H1c0-.26.164-1.03.76-1.724.545-.636 1.492-1.256 3.16-1.275zM1.5 5.5a3 3 0 1 1 6 0 3 3 0 0 1-6 0zm3-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+          </svg>
+        </div>
+        Mechanicy
+      </button>
+    </nav>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toastBox"></div>
+
+  <!-- CONFIRM DIALOG -->
+  <div id="confirmDialog" class="dialog-overlay" onclick="if(event.target===this)confirmCancel()">
+    <div class="dialog-sheet">
+      <div class="dialog-title">Potwierdź operację</div>
+      <div id="confirmText" class="dialog-text">Czy na pewno?</div>
+      <div class="dialog-actions">
+        <button class="btn btn-cancel" onclick="confirmCancel()">Anuluj</button>
+        <button class="btn btn-confirm" id="confirmOk">Usuń</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DODAJ MECHANIKA MODAL (z pickera) -->
+  <div id="addMechanikDialog" class="dialog-overlay" onclick="if(event.target===this)closeAddMechanik()">
+    <div class="dialog-sheet">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="dialog-title">Dodaj mechanika</div>
+        <button onclick="closeAddMechanik()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--slate-400);line-height:1">×</button>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Imię i nazwisko</label>
+        <input class="form-input" id="am-nazwa" placeholder="Jan Kowalski"
+          onkeydown="if(event.key==='Enter')dodajMechanikaPicker()">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Kolor</label>
+        <div id="amKolorPicker" class="kolor-picker"></div>
+      </div>
+      <button class="btn btn-primary" onclick="dodajMechanikaPicker()">Dodaj i zaloguj →</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

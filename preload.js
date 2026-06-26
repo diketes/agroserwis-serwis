@@ -12,10 +12,49 @@ contextBridge.exposeInMainWorld('api', {
     dodaj: (data) => ipcRenderer.invoke('czesci:dodaj', data),
     usun:  (id)   => ipcRenderer.invoke('czesci:usun', id),
   },
+  mechanicy: {
+    lista: ()     => ipcRenderer.invoke('mechanicy:lista'),
+    dodaj: (data) => ipcRenderer.invoke('mechanicy:dodaj', data),
+    usun:  (id)   => ipcRenderer.invoke('mechanicy:usun', id),
+  },
   statystyki: {
     pobierz: () => ipcRenderer.invoke('statystyki:pobierz'),
   },
   podglad: {
     numer: () => ipcRenderer.invoke('podglad:numer'),
+  },
+  server: {
+    info: () => ipcRenderer.invoke('server:info'),
+  },
+  print: {
+    pdf: (numer) => ipcRenderer.invoke('print:pdf', numer),
+  },
+  karta: {
+    otworz: (token) => ipcRenderer.invoke('karta:otworz', token),
+    url:    (token) => ipcRenderer.invoke('sledz:url', token),
+  },
+  photos: {
+    lista:       (zlecenie_id)       => ipcRenderer.invoke('photos:lista', zlecenie_id),
+    dodajZPliku: (data)              => ipcRenderer.invoke('photos:z-pliku', data),
+    dodajZDanych:(data)              => ipcRenderer.invoke('photos:dodaj', data),
+    usun:        (id)                => ipcRenderer.invoke('photos:usun', id),
+  },
+  settings: {
+    pobierz: ()     => ipcRenderer.invoke('settings:pobierz'),
+    zapisz:  (data) => ipcRenderer.invoke('settings:zapisz', data),
+  },
+  email: {
+    wyslij: (id) => ipcRenderer.invoke('email:wyslij', id),
+  },
+  apilo: {
+    polacz: (authCode) => ipcRenderer.invoke('apilo:polacz', authCode),
+    status: ()         => ipcRenderer.invoke('apilo:status'),
+    szukaj: (orderNr)  => ipcRenderer.invoke('apilo:szukaj', orderNr),
+  },
+  etykieta: {
+    drukuj: (id) => ipcRenderer.invoke('etykieta:drukuj', id),
+  },
+  raport: {
+    dane: (params) => ipcRenderer.invoke('raport:dane', params),
   },
 });
