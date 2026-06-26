@@ -8,6 +8,10 @@ const urlModule = require('url');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const https = require('https');
+const { spawn } = require('child_process');
+
+let tunnelProcess = null;
+let tunnelUrl = null;
 
 function generateToken() {
   return crypto.randomBytes(14).toString('hex'); // 28-char unguessable token
@@ -166,6 +170,76 @@ function generateNumer() {
     .filter(z => z.numer.startsWith(`ZS-${year}-`))
     .forEach(z => { const n = parseInt(z.numer.split('-')[2], 10); if (n > max) max = n; });
   return `ZS-${year}-${String(max + 1).padStart(5, '0')}`;
+}
+
+// ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
+
+function getCfPath() {
+  return path.join(app.getPath('userData'), 'cloudflared.exe');
+}
+
+function downloadCloudflared(onProgress) {
+  return new Promise((resolve, reject) => {
+    const dest = getCfPath();
+    if (fs.existsSync(dest)) { resolve(dest); return; }
+
+    const startUrl = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe';
+
+    function get(url, redirects = 0) {
+      if (redirects > 10) { reject(new Error('Too many redirects')); return; }
+      const mod = url.startsWith('https') ? https : http;
+      mod.get(url, { headers: { 'User-Agent': 'AgroserwisApp' } }, res => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          get(res.headers.location, redirects + 1); return;
+        }
+        if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
+        const total = parseInt(res.headers['content-length'] || '0');
+        let received = 0;
+        const file = fs.createWriteStream(dest + '.tmp');
+        res.on('data', chunk => {
+          received += chunk.length;
+          if (onProgress && total) onProgress(Math.round(received / total * 100));
+        });
+        res.pipe(file);
+        file.on('finish', () => {
+          file.close(() => {
+            fs.renameSync(dest + '.tmp', dest);
+            resolve(dest);
+          });
+        });
+        file.on('error', e => { fs.unlinkSync(dest + '.tmp'); reject(e); });
+      }).on('error', reject);
+    }
+
+    get(startUrl);
+  });
+}
+
+function startTunnel() {
+  return new Promise((resolve, reject) => {
+    if (tunnelUrl) { resolve(tunnelUrl); return; }
+    const cfPath = getCfPath();
+    tunnelProcess = spawn(cfPath, [
+      'tunnel', '--url', `http://localhost:${HTTP_PORT}`, '--no-autoupdate'
+    ]);
+    const onData = data => {
+      const text = data.toString();
+      const match = text.match(/https:\/\/[\w-]+\.trycloudflare\.com/);
+      if (match && !tunnelUrl) {
+        tunnelUrl = match[0];
+        resolve(tunnelUrl);
+      }
+    };
+    tunnelProcess.stdout.on('data', onData);
+    tunnelProcess.stderr.on('data', onData);
+    tunnelProcess.on('error', reject);
+    tunnelProcess.on('exit', () => { tunnelProcess = null; tunnelUrl = null; });
+    setTimeout(() => { if (!tunnelUrl) reject(new Error('Timeout — spróbuj ponownie')); }, 45000);
+  });
+}
+
+function stopTunnel() {
+  if (tunnelProcess) { tunnelProcess.kill(); tunnelProcess = null; tunnelUrl = null; }
 }
 
 // ── HTTP server for mobile PWA ─────────────────────────────────────
@@ -1043,3 +1117,38 @@ ipcMain.handle('apilo:szukaj', async (_, orderNr) => {
     return { ok: false, error: String(e.message || e) };
   }
 });
+
+// ── Cloudflare Tunnel IPC ──────────────────────────────────────────────────
+
+ipcMain.handle('tunnel:status', () => ({
+  running: !!tunnelProcess,
+  url: tunnelUrl,
+  hasBinary: fs.existsSync(getCfPath()),
+}));
+
+ipcMain.handle('tunnel:download', async (event) => {
+  try {
+    await downloadCloudflared(pct => {
+      event.sender.send('tunnel:download-progress', pct);
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+ipcMain.handle('tunnel:start', async () => {
+  try {
+    const url = await startTunnel();
+    return { ok: true, url };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+ipcMain.handle('tunnel:stop', () => {
+  stopTunnel();
+  return { ok: true };
+});
+
+app.on('before-quit', () => stopTunnel());

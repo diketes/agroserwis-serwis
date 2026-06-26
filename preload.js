@@ -57,4 +57,11 @@ contextBridge.exposeInMainWorld('api', {
   raport: {
     dane: (params) => ipcRenderer.invoke('raport:dane', params),
   },
+  tunnel: {
+    status:   ()  => ipcRenderer.invoke('tunnel:status'),
+    download: ()  => ipcRenderer.invoke('tunnel:download'),
+    start:    ()  => ipcRenderer.invoke('tunnel:start'),
+    stop:     ()  => ipcRenderer.invoke('tunnel:stop'),
+    onProgress: (cb) => ipcRenderer.on('tunnel:download-progress', (_, pct) => cb(pct)),
+  },
 });

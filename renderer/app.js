@@ -899,6 +899,93 @@ async function openPhoneModal() {
 }
 function closePhoneModal() { document.getElementById('phoneModal').classList.add('d-none'); }
 
+// ── Tunnel ─────────────────────────────────────────────────────────────
+
+function closeTunnelModal() { document.getElementById('tunnelModal').classList.add('d-none'); }
+
+async function openTunnelModal() {
+  document.getElementById('tunnelModal').classList.remove('d-none');
+  await renderTunnelContent();
+}
+
+async function renderTunnelContent() {
+  const el = document.getElementById('tunnelContent');
+  const st = await window.api.tunnel.status();
+
+  if (st.running && st.url) {
+    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(st.url + '/mobile')}`;
+    el.innerHTML = `
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="display:inline-block;background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:10px 20px;margin-bottom:14px">
+          <span style="color:#16a34a;font-size:.8rem;font-weight:800">● AKTYWNY</span>
+        </div>
+        <img src="${qr}" style="border-radius:10px;display:block;margin:0 auto 12px" width="180">
+        <div style="font-family:monospace;font-size:.75rem;color:#64748b;word-break:break-all;margin-bottom:16px">${st.url}</div>
+        <p style="font-size:.82rem;color:#64748b;margin-bottom:20px">Zeskanuj telefonem lub wpisz ten adres w aplikacji Android</p>
+        <button onclick="stopTunnel()" style="width:100%;padding:11px;background:#fff;border:2px solid #fecaca;color:#ef4444;border-radius:10px;font-weight:700;cursor:pointer">Zatrzymaj tunel</button>
+      </div>`;
+    document.getElementById('tunnelDot').style.display = 'block';
+  } else if (!st.hasBinary) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:2.5rem;margin-bottom:10px">📥</div>
+        <p style="font-size:.9rem;color:#1e293b;font-weight:700;margin-bottom:6px">Pierwsze uruchomienie</p>
+        <p style="font-size:.82rem;color:#64748b;margin-bottom:20px">Pobierze się narzędzie Cloudflare (~70 MB) — jednorazowo</p>
+        <div id="tunnelProgress" style="display:none;margin-bottom:16px">
+          <div style="background:#e2e8f0;border-radius:100px;height:8px;overflow:hidden">
+            <div id="tunnelBar" style="height:100%;background:#16a34a;border-radius:100px;width:0;transition:width .3s"></div>
+          </div>
+          <div id="tunnelPct" style="font-size:.78rem;color:#64748b;margin-top:6px;text-align:center">0%</div>
+        </div>
+        <button id="tunnelDownloadBtn" onclick="downloadAndStart()" style="width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:800;cursor:pointer">Pobierz i uruchom</button>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:2.5rem;margin-bottom:10px">🌐</div>
+        <p style="font-size:.9rem;color:#1e293b;font-weight:700;margin-bottom:6px">Tunel nieaktywny</p>
+        <p style="font-size:.82rem;color:#64748b;margin-bottom:20px">Uruchom aby uzyskać publiczny link — aplikacja Android będzie działać wszędzie</p>
+        <button id="tunnelStartBtn" onclick="startTunnel()" style="width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:800;cursor:pointer">Uruchom tunel</button>
+      </div>`;
+    document.getElementById('tunnelDot').style.display = 'none';
+  }
+}
+
+async function downloadAndStart() {
+  const btn = document.getElementById('tunnelDownloadBtn');
+  const prog = document.getElementById('tunnelProgress');
+  btn.disabled = true;
+  btn.textContent = 'Pobieranie...';
+  prog.style.display = 'block';
+
+  window.api.tunnel.onProgress(pct => {
+    document.getElementById('tunnelBar').style.width = pct + '%';
+    document.getElementById('tunnelPct').textContent = pct + '%';
+  });
+
+  const r = await window.api.tunnel.download();
+  if (!r.ok) { btn.textContent = 'Błąd: ' + r.error; btn.disabled = false; return; }
+  await startTunnel();
+}
+
+async function startTunnel() {
+  const btn = document.getElementById('tunnelStartBtn') || document.getElementById('tunnelDownloadBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Łączenie (~30s)...'; }
+  const r = await window.api.tunnel.start();
+  if (r.ok) {
+    await renderTunnelContent();
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = 'Spróbuj ponownie'; }
+    alert('Błąd tunelu: ' + r.error);
+  }
+}
+
+async function stopTunnel() {
+  await window.api.tunnel.stop();
+  document.getElementById('tunnelDot').style.display = 'none';
+  await renderTunnelContent();
+}
+
 // ── Settings ───────────────────────────────────────────────────────────
 
 async function openSettings() {
