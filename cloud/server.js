@@ -136,11 +136,16 @@ body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSys
 </body>
 </html>`;
 
+  const port = parseInt(s.smtp_port) || 587;
   const transporter = nodemailer.createTransport({
     host: s.smtp_host || 'smtp.gmail.com',
-    port: parseInt(s.smtp_port) || 587,
-    secure: parseInt(s.smtp_port) === 465,
+    port,
+    secure: port === 465,
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: { user: s.smtp_user, pass: s.smtp_pass },
+    tls: { rejectUnauthorized: false },
   });
 
   try {
