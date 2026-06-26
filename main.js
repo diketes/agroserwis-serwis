@@ -339,6 +339,17 @@ function startHttpServer() {
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
+    // Mobile app
+    if (pathname === '/mobile' || pathname === '/mobile/') {
+      const filePath = path.join(webDir, 'mobile.html');
+      fs.readFile(filePath, (err, content) => {
+        if (err) { res.writeHead(404); res.end('Nie znaleziono'); return; }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(content);
+      });
+      return;
+    }
+
     // Client tracking page: /sledz/:token
     if (pathname.startsWith('/sledz/')) {
       const filePath = path.join(webDir, 'sledz.html');
