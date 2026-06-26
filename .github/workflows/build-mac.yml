@@ -1,4 +1,4 @@
-name: Build macOS App
+name: Build Apps
 
 on:
   push:
@@ -31,4 +31,33 @@ jobs:
         with:
           name: AgroserwisServis-mac
           path: dist/*.dmg
+          retention-days: 30
+
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgroserwisServis-win
+          path: |
+            dist/*Setup*.exe
+            dist/*portable*.exe
           retention-days: 30
