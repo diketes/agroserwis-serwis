@@ -331,7 +331,8 @@ async function handleApi(pathname, method, query, body, res, req) {
     const statusy = {};
     db.zlecenia.forEach(z => { statusy[z.status] = (statusy[z.status] || 0) + 1; });
     const today = new Date().toDateString();
-    return sendJson(res, { statusy, dzisiaj: db.zlecenia.filter(z => new Date(z.data_przyjecia).toDateString() === today).length, total: db.zlecenia.length });
+    const dataWritable = (() => { try { fs.accessSync(DATA_DIR, fs.constants.W_OK); return true; } catch(e) { return false; } })();
+    return sendJson(res, { statusy, dzisiaj: db.zlecenia.filter(z => new Date(z.data_przyjecia).toDateString() === today).length, total: db.zlecenia.length, data_dir: DATA_DIR, data_writable: dataWritable });
   }
 
   res.writeHead(404); res.end('Not found');

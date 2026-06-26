@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -19,6 +20,12 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -30,6 +37,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private String serverUrl;
     private ValueCallback<Uri[]> filePathCallback;
+    private Uri cameraOutputUri;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -80,17 +88,36 @@ public class MainActivity extends AppCompatActivity {
                     filePathCallback.onReceiveValue(null);
                 }
                 filePathCallback = filePathCb;
+                cameraOutputUri = null;
 
-                Intent chooser = new Intent(Intent.ACTION_GET_CONTENT);
-                chooser.addCategory(Intent.CATEGORY_OPENABLE);
-                chooser.setType("image/*");
+                // Prepare camera intent with FileProvider output URI
+                Intent cameraIntent = null;
+                try {
+                    File photoDir = new File(getCacheDir(), "camera");
+                    photoDir.mkdirs();
+                    String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+                    File photoFile = new File(photoDir, "IMG_" + stamp + ".jpg");
+                    cameraOutputUri = FileProvider.getUriForFile(
+                            MainActivity.this,
+                            getPackageName() + ".fileprovider",
+                            photoFile);
+                    cameraIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+                    cameraIntent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraOutputUri);
+                    cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception e) {
+                    cameraOutputUri = null;
+                }
 
-                Intent camera = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+                Intent galleryIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                galleryIntent.setType("image/*");
 
-                Intent picker = Intent.createChooser(chooser, "Wybierz zdjęcie");
-                picker.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+                Intent chooser = Intent.createChooser(galleryIntent, "Wybierz zdjęcie");
+                if (cameraIntent != null) {
+                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+                }
 
-                startActivityForResult(picker, FILE_CHOOSER_REQUEST);
+                startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
                 return true;
             }
         });
@@ -176,14 +203,18 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == FILE_CHOOSER_REQUEST) {
             if (filePathCallback == null) return;
             Uri[] results = null;
-            if (resultCode == RESULT_OK && data != null) {
-                String dataString = data.getDataString();
-                if (dataString != null) {
-                    results = new Uri[]{Uri.parse(dataString)};
+            if (resultCode == RESULT_OK) {
+                if (data != null && data.getData() != null) {
+                    // Gallery selection
+                    results = new Uri[]{data.getData()};
+                } else if (cameraOutputUri != null) {
+                    // Camera capture — photo saved to cameraOutputUri
+                    results = new Uri[]{cameraOutputUri};
                 }
             }
             filePathCallback.onReceiveValue(results);
             filePathCallback = null;
+            cameraOutputUri = null;
             return;
         }
 
