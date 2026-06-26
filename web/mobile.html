@@ -8,100 +8,106 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 .topbar{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.topbar-back{font-size:1.4rem;cursor:pointer;padding:2px 10px 2px 0;display:none;line-height:1}
+.topbar-back{font-size:1.4rem;cursor:pointer;padding:2px 10px 2px 0;display:none;line-height:1;flex-shrink:0}
 .topbar-info{flex:1;min-width:0}
 .topbar-title{font-size:1.05rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-sub{font-size:.7rem;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .bottomnav{background:#fff;border-top:1px solid #e2e8f0;display:flex;flex-shrink:0}
-.nav-btn{flex:1;padding:10px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:#94a3b8;font-size:.65rem;font-weight:600;border:none;background:none;transition:color .15s}
+.nav-btn{flex:1;padding:9px 2px 7px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:#94a3b8;font-size:.6rem;font-weight:600;border:none;background:none;transition:color .15s}
 .nav-btn.active{color:#16a34a}
-.nav-btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nav-btn svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
-/* Cards & Sections */
 .section{background:#fff;margin:10px 12px 0;border-radius:14px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
 .section-title{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:10px}
 .row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9}
 .row:last-child{border-bottom:none}
 .row-label{font-size:.82rem;color:#64748b;flex-shrink:0}
-.row-val{font-size:.88rem;font-weight:700;color:#1e293b;text-align:right;min-width:0;word-break:break-word;padding-left:8px}
+.row-val{font-size:.88rem;font-weight:700;text-align:right;padding-left:8px;word-break:break-word;min-width:0}
 
-/* Form inputs */
-.field{margin-bottom:13px}
+.field{margin-bottom:12px}
 .field label{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px}
 .field input,.field textarea,.field select{width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:.93rem;color:#1e293b;background:#fff;outline:none;transition:border-color .15s;font-family:inherit}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:#16a34a}
 .field textarea{resize:vertical;min-height:70px}
 
-/* Buttons */
-.btn-green{width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:11px;font-size:.95rem;font-weight:800;cursor:pointer;margin-top:4px}
+.btn-green{width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:11px;font-size:.95rem;font-weight:800;cursor:pointer}
 .btn-green:active{background:#15803d}
+.btn-green:disabled{background:#86efac;cursor:not-allowed}
 .btn-outline{width:100%;padding:11px;background:#fff;color:#16a34a;border:2px solid #16a34a;border-radius:11px;font-size:.9rem;font-weight:700;cursor:pointer;margin-top:8px}
 .btn-danger{width:100%;padding:11px;background:#fff;color:#ef4444;border:2px solid #fecaca;border-radius:11px;font-size:.88rem;font-weight:700;cursor:pointer;margin-top:8px}
-.btn-sm{padding:7px 14px;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer;border:none}
+.btn-gray{width:100%;padding:11px;background:#f1f5f9;color:#64748b;border:none;border-radius:11px;font-size:.88rem;font-weight:700;cursor:pointer;margin-top:8px}
+.btn-sm{padding:7px 14px;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;border:none;white-space:nowrap}
 .btn-sm-green{background:#16a34a;color:#fff}
 .btn-sm-red{background:#fff;color:#ef4444;border:1.5px solid #fecaca}
 
-/* Lista */
 .search-wrap{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #e2e8f0}
 .search-bar{padding:10px 12px;display:flex;gap:8px}
 .search-input{flex:1;border:1.5px solid #e2e8f0;border-radius:10px;padding:8px 12px;font-size:.9rem;outline:none;background:#f8fafc}
 .search-input:focus{border-color:#16a34a}
-.filter-scroll{display:flex;gap:8px;padding:6px 12px 10px;overflow-x:auto}
+.filter-scroll{display:flex;gap:8px;padding:4px 12px 10px;overflow-x:auto}
 .filter-scroll::-webkit-scrollbar{display:none}
-.chip{padding:5px 14px;border-radius:100px;font-size:.78rem;font-weight:700;border:2px solid #e2e8f0;background:#fff;cursor:pointer;white-space:nowrap;color:#64748b;transition:all .15s}
+.chip{padding:5px 14px;border-radius:100px;font-size:.78rem;font-weight:700;border:2px solid #e2e8f0;background:#fff;cursor:pointer;white-space:nowrap;color:#64748b}
 .chip.active{background:#16a34a;border-color:#16a34a;color:#fff}
+
 .card{background:#fff;margin:10px 12px 0;border-radius:14px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);cursor:pointer;transition:transform .1s}
 .card:active{transform:scale(.98)}
 .card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
 .card-numer{font-family:monospace;font-size:.85rem;font-weight:900;color:#16a34a}
-.card-status{font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:100px}
+.s-badge{font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:100px}
 .card-klient{font-size:.95rem;font-weight:700}
 .card-sprzet{font-size:.8rem;color:#64748b;margin-top:2px}
 .card-date{font-size:.72rem;color:#94a3b8;margin-top:5px}
-.empty{text-align:center;padding:60px 24px;color:#94a3b8}
-.empty-icon{font-size:3rem;margin-bottom:12px}
-.loading{text-align:center;padding:40px;color:#94a3b8;font-size:.9rem}
 
-/* Parts */
 .parte-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;gap:8px}
 .parte-item:last-child{border-bottom:none}
 .parte-name{font-size:.85rem;font-weight:600;flex:1}
 .parte-price{font-size:.85rem;color:#16a34a;font-weight:700;white-space:nowrap}
-.parte-qty{font-size:.78rem;color:#64748b}
+.parte-qty{font-size:.76rem;color:#64748b}
 
-/* Mech grid */
-.mech-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mech-opt{padding:10px;border:2px solid #e2e8f0;border-radius:10px;text-align:center;font-size:.82rem;font-weight:700;cursor:pointer;color:#64748b;transition:all .15s}
+.mech-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.mech-opt{padding:10px;border:2px solid #e2e8f0;border-radius:10px;text-align:center;font-size:.82rem;font-weight:700;cursor:pointer;color:#64748b}
 .mech-opt.sel{border-color:#16a34a;background:#f0fdf4;color:#16a34a}
 
-/* Status colors */
+.mech-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9}
+.mech-item:last-child{border-bottom:none}
+.mech-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;flex-shrink:0}
+
+.stat-card{background:#fff;margin:10px 12px 0;border-radius:14px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.07);display:flex;align-items:center;gap:14px}
+.stat-val{font-size:1.8rem;font-weight:900;color:#16a34a;line-height:1}
+.stat-label{font-size:.8rem;color:#64748b;margin-top:2px}
+.bar-row{margin-bottom:10px}
+.bar-header{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px}
+.bar-name{font-weight:700}
+.bar-cnt{color:#64748b}
+.bar-track{background:#f1f5f9;border-radius:100px;height:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:100px;background:#16a34a;transition:width .6s}
+
+.settings-item{display:flex;align-items:center;padding:13px 0;border-bottom:1px solid #f1f5f9;cursor:pointer}
+.settings-item:last-child{border-bottom:none}
+.settings-item-icon{font-size:1.3rem;width:36px;flex-shrink:0}
+.settings-item-info{flex:1}
+.settings-item-title{font-size:.92rem;font-weight:700}
+.settings-item-sub{font-size:.75rem;color:#64748b;margin-top:1px}
+.settings-item-arrow{color:#cbd5e1;font-size:1.1rem}
+
+.empty{text-align:center;padding:60px 24px;color:#94a3b8}
+.empty-icon{font-size:3rem;margin-bottom:12px}
+.loading{text-align:center;padding:40px;color:#94a3b8;font-size:.9rem}
+
 .s-przyjeto{background:#dbeafe;color:#1d4ed8}
 .s-naprawa{background:#fef9c3;color:#854d0e}
 .s-czesci{background:#fed7aa;color:#c2410c}
 .s-gotowe{background:#dcfce7;color:#15803d}
 .s-wydano{background:#f1f5f9;color:#64748b}
 
-/* Stats */
-.stat-card{background:#fff;margin:10px 12px 0;border-radius:14px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.07);display:flex;align-items:center;gap:14px}
-.stat-icon{font-size:2rem}
-.stat-val{font-size:1.8rem;font-weight:900;color:#16a34a;line-height:1}
-.stat-label{font-size:.8rem;color:#64748b;margin-top:2px}
-.bar-row{margin-bottom:10px}
-.bar-header{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px}
-.bar-name{font-weight:700}
-.bar-count{color:#64748b}
-.bar-track{background:#f1f5f9;border-radius:100px;height:8px;overflow:hidden}
-.bar-fill{height:100%;border-radius:100px;background:#16a34a;transition:width .6s}
-
-/* Toast */
-.toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:100px;font-size:.85rem;font-weight:600;z-index:999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+.toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:100px;font-size:.85rem;font-weight:600;z-index:999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
 .toast.show{opacity:1}
 </style>
 </head>
 <body>
 
-<div class="topbar" id="topbar">
+<div class="topbar">
   <span class="topbar-back" id="backBtn" onclick="goBack()">&#8592;</span>
   <div class="topbar-info">
     <div class="topbar-title" id="topbarTitle">Agroserwis Serwis</div>
@@ -124,6 +130,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Statystyki
   </button>
+  <button class="nav-btn" id="nav-ustawienia" onclick="nav('ustawienia')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    Ustawienia
+  </button>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -134,13 +144,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 const STATUSY = ['Przyjęto','W naprawie','Czeka na części','Gotowe','Wydano'];
 const STATUS_CLS = {'Przyjęto':'s-przyjeto','W naprawie':'s-naprawa','Czeka na części':'s-czesci','Gotowe':'s-gotowe','Wydano':'s-wydano'};
 
-let currentView = 'lista';
-let currentId = null;
+let view = 'lista';
+let zlecenieId = null;
 let mechanicy = [];
 let selMechId = null;
 let filterStatus = 'Wszystkie';
-let searchVal = '';
-let navStack = [];
+let search = '';
+let stack = [];
 
 async function api(method, path, body) {
   const opts = { method, headers: {'Content-Type':'application/json'}, cache: 'no-store' };
@@ -158,8 +168,8 @@ function toast(msg, dur = 2500) {
   el._t = setTimeout(() => el.classList.remove('show'), dur);
 }
 
-function chip(status) {
-  return `<span class="card-status ${STATUS_CLS[status]||'s-wydano'}">${status}</span>`;
+function badge(status) {
+  return `<span class="s-badge ${STATUS_CLS[status]||'s-wydano'}">${status}</span>`;
 }
 
 function fmt(iso) {
@@ -169,61 +179,62 @@ function fmt(iso) {
 
 function setTop(title, sub, back) {
   document.getElementById('topbarTitle').textContent = title;
-  document.getElementById('topbarSub').textContent = sub || '';
+  document.getElementById('topbarSub').textContent = sub||'';
   document.getElementById('backBtn').style.display = back ? 'block' : 'none';
 }
 
-function setNav(view) {
-  ['lista','nowe','stat'].forEach(v =>
-    document.getElementById('nav-'+v).classList.toggle('active', v === view));
-  document.getElementById('bottomnav').style.display =
-    ['szczegoly','edytuj','czesci'].includes(view) ? 'none' : 'flex';
+function setNav(v) {
+  ['lista','nowe','stat','ustawienia'].forEach(n =>
+    document.getElementById('nav-'+n)?.classList.toggle('active', n === v));
+  const subViews = ['szczegoly','edytuj','czesci','smtp','mechanicy-edit','dodaj-mech'];
+  document.getElementById('bottomnav').style.display = subViews.includes(v) ? 'none' : 'flex';
 }
 
-function nav(view, id) {
-  if (!['lista','nowe','stat'].includes(view)) navStack.push(currentView);
-  else navStack = [];
-  currentView = view;
-  currentId = id || null;
+function nav(v, id) {
+  const mainViews = ['lista','nowe','stat','ustawienia'];
+  if (!mainViews.includes(v)) stack.push(view);
+  else stack = [];
+  view = v;
+  zlecenieId = id || null;
+  selMechId = null;
   render();
 }
 
 function goBack() {
-  const prev = navStack.pop() || 'lista';
-  if (prev === 'szczegoly' && currentId) {
-    currentView = 'szczegoly';
-    render();
-  } else {
-    nav(prev === 'lista' ? 'lista' : prev);
-  }
+  const prev = stack.pop();
+  if (!prev) { nav('lista'); return; }
+  view = prev;
+  render();
 }
 
 function render() {
-  setNav(currentView);
-  if (currentView === 'lista') renderLista();
-  else if (currentView === 'szczegoly') renderSzczegoly(currentId);
-  else if (currentView === 'edytuj') renderEdytuj(currentId);
-  else if (currentView === 'czesci') renderCzesci(currentId);
-  else if (currentView === 'nowe') renderNowe();
-  else if (currentView === 'stat') renderStat();
+  setNav(view);
+  const map = {
+    lista: renderLista, szczegoly: () => renderSzczegoly(zlecenieId),
+    edytuj: () => renderEdytuj(zlecenieId), czesci: () => renderCzesci(zlecenieId),
+    nowe: renderNowe, stat: renderStat,
+    ustawienia: renderUstawienia, smtp: renderSmtp,
+    'mechanicy-edit': renderMechanicyEdit, 'dodaj-mech': renderDodajMechanika,
+  };
+  (map[view] || renderLista)();
 }
 
 // ─── LISTA ────────────────────────────────────────────────────────────────────
 
 async function renderLista() {
-  setTop('Zlecenia', 'Lista zleceń', false);
+  setTop('Zlecenia','Lista zleceń',false);
   const c = document.getElementById('content');
   c.innerHTML = `
     <div class="search-wrap">
-      <div class="search-bar"><input class="search-input" id="si" type="search" placeholder="Szukaj klienta, nr, marki..." value="${searchVal}"></div>
+      <div class="search-bar"><input class="search-input" id="si" type="search" placeholder="Szukaj klienta, nr, marki..." value="${search}"></div>
       <div class="filter-scroll" id="fs"></div>
     </div>
     <div id="li"><div class="loading">Ładowanie...</div></div>`;
-  document.getElementById('si').addEventListener('input', e => { searchVal = e.target.value; loadLista(); });
+  document.getElementById('si').addEventListener('input', e => { search = e.target.value; loadLista(); });
   const fs = document.getElementById('fs');
   ['Wszystkie','Przyjęto','W naprawie','Czeka na części','Gotowe','Wydano'].forEach(s => {
     const b = document.createElement('button');
-    b.className = 'chip' + (s === filterStatus ? ' active' : '');
+    b.className = 'chip'+(s===filterStatus?' active':'');
     b.textContent = s;
     b.onclick = () => { filterStatus = s; fs.querySelectorAll('.chip').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadLista(); };
     fs.appendChild(b);
@@ -234,63 +245,61 @@ async function renderLista() {
 async function loadLista() {
   const p = new URLSearchParams();
   if (filterStatus !== 'Wszystkie') p.set('status', filterStatus);
-  if (searchVal) p.set('szukaj', searchVal);
+  if (search) p.set('szukaj', search);
   const data = await api('GET', `/api/zlecenia?${p}`);
   const c = document.getElementById('li');
   if (!data.length) { c.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>Brak zleceń</div>`; return; }
   c.innerHTML = data.map(z => {
-    const sp = [z.marka, z.model].filter(Boolean).join(' ') || '—';
+    const sp = [z.marka,z.model].filter(Boolean).join(' ')||'—';
     return `<div class="card" onclick="nav('szczegoly',${z.id})">
-      <div class="card-top"><span class="card-numer">${z.numer}</span>${chip(z.status)}</div>
+      <div class="card-top"><span class="card-numer">${z.numer}</span>${badge(z.status)}</div>
       <div class="card-klient">${z.klient_nazwa||'—'}</div>
       <div class="card-sprzet">${sp}</div>
       <div class="card-date">${fmt(z.data_przyjecia)}</div>
     </div>`;
-  }).join('') + '<div style="height:14px"></div>';
+  }).join('')+'<div style="height:14px"></div>';
 }
 
 // ─── SZCZEGÓŁY ────────────────────────────────────────────────────────────────
 
 async function renderSzczegoly(id) {
-  setTop('Zlecenie', '…', true);
+  setTop('Zlecenie','…',true);
   document.getElementById('content').innerHTML = '<div class="loading">Ładowanie...</div>';
   const z = await api('GET', `/api/zlecenia/${id}`);
-  if (!z) { document.getElementById('content').innerHTML = '<div class="empty">Nie znaleziono</div>'; return; }
   setTop(z.numer, z.klient_nazwa||'', true);
-  const sp = [z.marka, z.model].filter(Boolean).join(' ') || '—';
+  const sp = [z.marka,z.model].filter(Boolean).join(' ')||'—';
   const mech = mechanicy.find(m => m.id === z.mechanik_id);
-  const czesci = z.czesci || [];
-  const kCz = czesci.reduce((s,c) => s + c.ilosc*c.cena_jednostkowa, 0);
-  const kTot = kCz + (z.koszt_robocizny||0);
-
+  const czesci = z.czesci||[];
+  const kCz = czesci.reduce((s,c) => s+c.ilosc*c.cena_jednostkowa, 0);
+  const kTot = kCz+(z.koszt_robocizny||0);
   const parteHtml = czesci.length
     ? czesci.map(p => `<div class="parte-item">
-        <div><div class="parte-name">${p.nazwa}</div><div class="parte-qty">×${p.ilosc}</div></div>
+        <div><div class="parte-name">${p.nazwa}</div><div class="parte-qty">×${p.ilosc} · ${p.cena_jednostkowa.toFixed(2)} zł/szt</div></div>
         <div class="parte-price">${(p.ilosc*p.cena_jednostkowa).toFixed(2)} zł</div>
       </div>`).join('')
     : '<div style="color:#94a3b8;font-size:.85rem;padding:4px 0">Brak części</div>';
-
   const statusOpts = STATUSY.map(s => `<option${s===z.status?' selected':''}>${s}</option>`).join('');
 
   document.getElementById('content').innerHTML = `
     <div class="section">
       <div class="section-title">Klient</div>
       <div class="row"><span class="row-label">Nazwisko</span><span class="row-val">${z.klient_nazwa||'—'}</span></div>
-      <div class="row"><span class="row-label">Telefon</span><span class="row-val"><a href="tel:${z.klient_telefon}" style="color:#16a34a">${z.klient_telefon||'—'}</a></span></div>
+      <div class="row"><span class="row-label">Telefon</span><span class="row-val"><a href="tel:${z.klient_telefon}" style="color:#16a34a;font-weight:700">${z.klient_telefon||'—'}</a></span></div>
       <div class="row"><span class="row-label">E-mail</span><span class="row-val" style="font-size:.78rem">${z.klient_email||'—'}</span></div>
+      ${z.klient_email ? `<button class="btn-outline" id="emailBtn" onclick="wyslijEmail(${z.id})">📧 Wyślij link śledzący</button>` : ''}
     </div>
     <div class="section">
       <div class="section-title">Sprzęt</div>
       <div class="row"><span class="row-label">Marka/Model</span><span class="row-val">${sp}</span></div>
-      ${z.nr_seryjny ? `<div class="row"><span class="row-label">Nr ser.</span><span class="row-val">${z.nr_seryjny}</span></div>` : ''}
+      ${z.nr_seryjny?`<div class="row"><span class="row-label">Nr ser.</span><span class="row-val">${z.nr_seryjny}</span></div>`:''}
       <div class="row"><span class="row-label">Usterka</span><span class="row-val" style="font-size:.82rem">${z.opis_usterki||'—'}</span></div>
-      ${z.uwagi ? `<div class="row"><span class="row-label">Uwagi</span><span class="row-val" style="font-size:.82rem">${z.uwagi}</span></div>` : ''}
+      ${z.uwagi?`<div class="row"><span class="row-label">Uwagi</span><span class="row-val" style="font-size:.82rem">${z.uwagi}</span></div>`:''}
     </div>
     <div class="section">
       <div class="section-title">Status</div>
       <div class="row"><span class="row-label">Mechanik</span><span class="row-val">${mech?mech.nazwa:'—'}</span></div>
       <div class="row"><span class="row-label">Przyjęto</span><span class="row-val">${fmt(z.data_przyjecia)}</span></div>
-      <select id="statusSel" style="width:100%;margin-top:10px;padding:10px;border:2px solid #e2e8f0;border-radius:10px;font-size:.9rem;font-weight:700;outline:none">${statusOpts}</select>
+      <select id="statusSel" style="width:100%;margin-top:10px;padding:10px;border:2px solid #e2e8f0;border-radius:10px;font-size:.9rem;font-weight:700;outline:none;background:#fff">${statusOpts}</select>
       <button class="btn-green" style="margin-top:10px" onclick="saveStatus(${z.id})">Zapisz status</button>
     </div>
     <div class="section">
@@ -298,21 +307,34 @@ async function renderSzczegoly(id) {
       ${parteHtml}
       <div class="row" style="margin-top:8px"><span class="row-label">Robocizna</span><span class="row-val">${(z.koszt_robocizny||0).toFixed(2)} zł</span></div>
       <div class="row"><span class="row-label">Części</span><span class="row-val">${kCz.toFixed(2)} zł</span></div>
-      <div class="row"><span class="row-label" style="font-weight:700">Łącznie</span><span class="row-val" style="color:#16a34a;font-size:.95rem">${kTot.toFixed(2)} zł</span></div>
-      <button class="btn-outline" onclick="goToCzesci(${z.id})">+ Zarządzaj częściami</button>
+      <div class="row"><span class="row-label" style="font-weight:800">Łącznie</span><span class="row-val" style="color:#16a34a;font-size:.95rem;font-weight:900">${kTot.toFixed(2)} zł</span></div>
+      <button class="btn-outline" onclick="goSub('czesci',${z.id})">+ Zarządzaj częściami</button>
     </div>
     <div style="padding:12px">
-      <button class="btn-outline" onclick="goToEdytuj(${z.id})">✏ Edytuj dane zlecenia</button>
+      <button class="btn-outline" onclick="goSub('edytuj',${z.id})">✏ Edytuj dane zlecenia</button>
       <button class="btn-danger" onclick="usunZlecenie(${z.id})">🗑 Usuń zlecenie</button>
     </div>
     <div style="height:16px"></div>`;
 }
 
+function goSub(v, id) { stack.push('szczegoly'); view = v; zlecenieId = id; render(); }
+
 async function saveStatus(id) {
-  const status = document.getElementById('statusSel').value;
-  await api('PUT', `/api/zlecenia/${id}`, { status });
+  const s = document.getElementById('statusSel').value;
+  await api('PUT', `/api/zlecenia/${id}`, { status: s });
   toast('Status zapisany ✓');
-  setTimeout(() => renderSzczegoly(id), 500);
+  setTimeout(() => renderSzczegoly(id), 400);
+}
+
+async function wyslijEmail(id) {
+  const btn = document.getElementById('emailBtn');
+  if (!btn) return;
+  btn.textContent = 'Wysyłanie...'; btn.disabled = true;
+  try {
+    const r = await api('POST', `/api/email/${id}`);
+    toast(r.ok ? 'E-mail wysłany ✓' : 'Błąd: ' + r.error);
+  } catch(e) { toast('Błąd wysyłki'); }
+  btn.textContent = '📧 Wyślij link śledzący'; btn.disabled = false;
 }
 
 async function usunZlecenie(id) {
@@ -322,45 +344,40 @@ async function usunZlecenie(id) {
   nav('lista');
 }
 
-function goToEdytuj(id) { navStack.push('szczegoly'); currentView = 'edytuj'; currentId = id; render(); }
-function goToCzesci(id) { navStack.push('szczegoly'); currentView = 'czesci'; currentId = id; render(); }
-
 // ─── EDYTUJ ───────────────────────────────────────────────────────────────────
 
 async function renderEdytuj(id) {
-  setTop('Edytuj zlecenie', '', true);
+  setTop('Edytuj zlecenie','',true);
   document.getElementById('content').innerHTML = '<div class="loading">Ładowanie...</div>';
   const z = await api('GET', `/api/zlecenia/${id}`);
-  if (!mechanicy.length) mechanicy = await api('GET', '/api/mechanicy');
+  if (!mechanicy.length) mechanicy = await api('GET','/api/mechanicy');
   selMechId = z.mechanik_id;
-
+  const statusOpts = STATUSY.map(s => `<option${s===z.status?' selected':''}>${s}</option>`).join('');
   const mechGrid = mechanicy.map(m =>
     `<div class="mech-opt${m.id===z.mechanik_id?' sel':''}" id="mo-${m.id}" onclick="selMech(${m.id})">${m.nazwa}</div>`
   ).join('');
 
-  const statusOpts = STATUSY.map(s => `<option${s===z.status?' selected':''}>${s}</option>`).join('');
-
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-top:12px">
       <div class="section-title">Klient</div>
-      <div class="field"><label>Imię i nazwisko</label><input id="e-nazwa" value="${z.klient_nazwa||''}"></div>
-      <div class="field"><label>Telefon</label><input id="e-tel" type="tel" value="${z.klient_telefon||''}"></div>
-      <div class="field"><label>E-mail</label><input id="e-email" type="email" value="${z.klient_email||''}"></div>
+      <div class="field"><label>Imię i nazwisko</label><input id="e-nazwa" value="${esc(z.klient_nazwa)}"></div>
+      <div class="field"><label>Telefon</label><input id="e-tel" type="tel" value="${esc(z.klient_telefon)}"></div>
+      <div class="field"><label>E-mail</label><input id="e-email" type="email" value="${esc(z.klient_email)}"></div>
     </div>
     <div class="section">
       <div class="section-title">Sprzęt</div>
-      <div class="field"><label>Marka</label><input id="e-marka" value="${z.marka||''}"></div>
-      <div class="field"><label>Model</label><input id="e-model" value="${z.model||''}"></div>
-      <div class="field"><label>Nr seryjny</label><input id="e-ser" value="${z.nr_seryjny||''}"></div>
-      <div class="field"><label>Usterka</label><textarea id="e-usterka">${z.opis_usterki||''}</textarea></div>
-      <div class="field"><label>Uwagi</label><textarea id="e-uwagi">${z.uwagi||''}</textarea></div>
+      <div class="field"><label>Marka</label><input id="e-marka" value="${esc(z.marka)}"></div>
+      <div class="field"><label>Model</label><input id="e-model" value="${esc(z.model)}"></div>
+      <div class="field"><label>Nr seryjny</label><input id="e-ser" value="${esc(z.nr_seryjny)}"></div>
+      <div class="field"><label>Usterka</label><textarea id="e-usterka">${esc(z.opis_usterki)}</textarea></div>
+      <div class="field"><label>Uwagi</label><textarea id="e-uwagi">${esc(z.uwagi)}</textarea></div>
     </div>
     <div class="section">
       <div class="section-title">Status i koszty</div>
       <div class="field"><label>Status</label><select id="e-status">${statusOpts}</select></div>
       <div class="field"><label>Koszt robocizny (zł)</label><input id="e-rob" type="number" step="0.01" value="${z.koszt_robocizny||0}"></div>
     </div>
-    ${mechanicy.length ? `<div class="section"><div class="section-title">Mechanik</div><div class="mech-grid">${mechGrid}</div></div>` : ''}
+    ${mechanicy.length?`<div class="section"><div class="section-title">Mechanik</div><div class="mech-grid">${mechGrid}</div></div>`:''}
     <div style="padding:12px">
       <button class="btn-green" onclick="zapiszEdycje(${id})">Zapisz zmiany</button>
     </div>
@@ -370,44 +387,34 @@ async function renderEdytuj(id) {
 function selMech(id) {
   selMechId = id;
   document.querySelectorAll('.mech-opt').forEach(el => el.classList.remove('sel'));
-  const el = document.getElementById('mo-'+id);
-  if (el) el.classList.add('sel');
+  document.getElementById('mo-'+id)?.classList.add('sel');
 }
 
 async function zapiszEdycje(id) {
   await api('PUT', `/api/zlecenia/${id}`, {
-    klient_nazwa:   document.getElementById('e-nazwa').value.trim(),
-    klient_telefon: document.getElementById('e-tel').value.trim(),
-    klient_email:   document.getElementById('e-email').value.trim(),
-    marka:          document.getElementById('e-marka').value.trim(),
-    model:          document.getElementById('e-model').value.trim(),
-    nr_seryjny:     document.getElementById('e-ser').value.trim(),
-    opis_usterki:   document.getElementById('e-usterka').value.trim(),
-    uwagi:          document.getElementById('e-uwagi').value.trim(),
-    status:         document.getElementById('e-status').value,
+    klient_nazwa:    v('e-nazwa'), klient_telefon: v('e-tel'), klient_email: v('e-email'),
+    marka:           v('e-marka'), model: v('e-model'), nr_seryjny: v('e-ser'),
+    opis_usterki:    v('e-usterka'), uwagi: v('e-uwagi'),
+    status:          document.getElementById('e-status').value,
     koszt_robocizny: parseFloat(document.getElementById('e-rob').value)||0,
-    mechanik_id:    selMechId,
+    mechanik_id:     selMechId,
   });
   toast('Zapisano ✓');
-  navStack = [];
-  currentView = 'szczegoly';
-  render();
+  stack = []; view = 'szczegoly'; render();
 }
 
 // ─── CZĘŚCI ───────────────────────────────────────────────────────────────────
 
 async function renderCzesci(id) {
-  setTop('Części', '', true);
+  setTop('Części','',true);
   document.getElementById('content').innerHTML = '<div class="loading">Ładowanie...</div>';
   const z = await api('GET', `/api/zlecenia/${id}`);
-  const czesci = z.czesci || [];
-
+  const czesci = z.czesci||[];
   const liHtml = czesci.length
     ? czesci.map(p => `<div class="parte-item">
-        <div style="flex:1"><div class="parte-name">${p.nazwa}</div>
-        <div class="parte-qty">×${p.ilosc} · ${p.cena_jednostkowa.toFixed(2)} zł/szt</div></div>
+        <div style="flex:1"><div class="parte-name">${p.nazwa}</div><div class="parte-qty">×${p.ilosc} · ${p.cena_jednostkowa.toFixed(2)} zł/szt</div></div>
         <div class="parte-price">${(p.ilosc*p.cena_jednostkowa).toFixed(2)} zł</div>
-        <button class="btn-sm btn-sm-red" style="margin-left:10px" onclick="usunCzesc(${p.id},${id})">✕</button>
+        <button class="btn-sm btn-sm-red" style="margin-left:8px" onclick="usunCzesc(${p.id},${id})">✕</button>
       </div>`).join('')
     : '<div style="color:#94a3b8;font-size:.85rem;padding:4px 0">Brak części</div>';
 
@@ -418,43 +425,39 @@ async function renderCzesci(id) {
     </div>
     <div class="section">
       <div class="section-title">Dodaj część</div>
-      <div class="field"><label>Nazwa części</label><input id="p-nazwa" placeholder="np. Łańcuch piły"></div>
+      <div class="field"><label>Nazwa</label><input id="p-nazwa" placeholder="np. Łańcuch piły"></div>
       <div style="display:flex;gap:10px">
-        <div class="field" style="flex:1"><label>Ilość</label><input id="p-ilosc" type="number" value="1" min="1"></div>
-        <div class="field" style="flex:1"><label>Cena (zł)</label><input id="p-cena" type="number" step="0.01" value="0" min="0"></div>
+        <div class="field" style="flex:1"><label>Ilość</label><input id="p-il" type="number" value="1" min="1"></div>
+        <div class="field" style="flex:1"><label>Cena (zł)</label><input id="p-cena" type="number" step="0.01" value="0"></div>
       </div>
       <button class="btn-green" onclick="dodajCzesc(${id})">+ Dodaj</button>
     </div>
     <div style="height:16px"></div>`;
 }
 
-async function dodajCzesc(zlecenieId) {
-  const nazwa = document.getElementById('p-nazwa').value.trim();
-  if (!nazwa) { toast('Wpisz nazwę części'); return; }
-  const ilosc = parseFloat(document.getElementById('p-ilosc').value) || 1;
-  const cena  = parseFloat(document.getElementById('p-cena').value)  || 0;
-  await api('POST', '/api/czesci', { zlecenie_id: zlecenieId, nazwa, ilosc, cena_jednostkowa: cena });
-  toast('Część dodana ✓');
-  renderCzesci(zlecenieId);
+async function dodajCzesc(zId) {
+  const nazwa = v('p-nazwa');
+  if (!nazwa) { toast('Wpisz nazwę'); return; }
+  await api('POST','/api/czesci',{ zlecenie_id:zId, nazwa, ilosc:parseFloat(document.getElementById('p-il').value)||1, cena_jednostkowa:parseFloat(document.getElementById('p-cena').value)||0 });
+  toast('Dodano ✓');
+  renderCzesci(zId);
 }
 
-async function usunCzesc(partId, zlecenieId) {
-  await api('DELETE', `/api/czesci/${partId}`);
+async function usunCzesc(pId, zId) {
+  await api('DELETE', `/api/czesci/${pId}`);
   toast('Usunięto');
-  renderCzesci(zlecenieId);
+  renderCzesci(zId);
 }
 
 // ─── NOWE ─────────────────────────────────────────────────────────────────────
 
 async function renderNowe() {
-  setTop('Nowe zlecenie', '', false);
-  if (!mechanicy.length) mechanicy = await api('GET', '/api/mechanicy');
+  setTop('Nowe zlecenie','',false);
+  if (!mechanicy.length) mechanicy = await api('GET','/api/mechanicy').catch(()=>[]);
   selMechId = null;
-
   const mechGrid = mechanicy.map(m =>
     `<div class="mech-opt" id="mn-${m.id}" onclick="selMechN(${m.id})">${m.nazwa}</div>`
   ).join('');
-
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-top:12px">
       <div class="section-title">Klient</div>
@@ -468,63 +471,200 @@ async function renderNowe() {
       <div class="field"><label>Model</label><input id="n-model" placeholder="np. MS 250"></div>
       <div class="field"><label>Usterka *</label><textarea id="n-usterka" placeholder="Opisz problem..."></textarea></div>
     </div>
-    ${mechanicy.length ? `<div class="section"><div class="section-title">Mechanik</div><div class="mech-grid">${mechGrid}</div></div>` : ''}
-    <div style="padding:12px">
-      <button class="btn-green" onclick="submitNowe()">+ Utwórz zlecenie</button>
-    </div>
+    ${mechanicy.length?`<div class="section"><div class="section-title">Mechanik</div><div class="mech-grid">${mechGrid}</div></div>`:''}
+    <div style="padding:12px"><button class="btn-green" onclick="submitNowe()">+ Utwórz zlecenie</button></div>
     <div style="height:16px"></div>`;
 }
 
 function selMechN(id) {
   selMechId = id;
   document.querySelectorAll('.mech-opt').forEach(el => el.classList.remove('sel'));
-  const el = document.getElementById('mn-'+id);
-  if (el) el.classList.add('sel');
+  document.getElementById('mn-'+id)?.classList.add('sel');
 }
 
 async function submitNowe() {
-  const nazwa   = document.getElementById('n-nazwa')?.value?.trim();
-  const usterka = document.getElementById('n-usterka')?.value?.trim();
-  if (!nazwa)   { toast('Podaj imię i nazwisko'); return; }
+  const nazwa = v('n-nazwa'), usterka = v('n-usterka');
+  if (!nazwa) { toast('Podaj imię i nazwisko'); return; }
   if (!usterka) { toast('Opisz usterkę'); return; }
   const btn = document.querySelector('.btn-green');
   btn.textContent = 'Tworzenie...'; btn.disabled = true;
-  const res = await api('POST', '/api/zlecenia', {
-    klient_nazwa:    nazwa,
-    klient_telefon:  document.getElementById('n-tel')?.value?.trim()||'',
-    klient_email:    document.getElementById('n-email')?.value?.trim()||'',
-    marka:           document.getElementById('n-marka')?.value?.trim()||'',
-    model:           document.getElementById('n-model')?.value?.trim()||'',
-    opis_usterki:    usterka,
-    mechanik_id:     selMechId,
+  const res = await api('POST','/api/zlecenia',{
+    klient_nazwa:nazwa, klient_telefon:v('n-tel'), klient_email:v('n-email'),
+    marka:v('n-marka'), model:v('n-model'), opis_usterki:usterka, mechanik_id:selMechId,
   });
-  if (res?.id) { toast(`Zlecenie ${res.numer} utworzone ✓`); setTimeout(() => nav('szczegoly', res.id), 600); }
-  else { btn.textContent = '+ Utwórz zlecenie'; btn.disabled = false; toast('Błąd — spróbuj ponownie'); }
+  if (res?.id) { toast(`Zlecenie ${res.numer} ✓`); setTimeout(()=>nav('szczegoly',res.id),600); }
+  else { btn.textContent='+ Utwórz zlecenie'; btn.disabled=false; toast('Błąd'); }
 }
 
 // ─── STATYSTYKI ───────────────────────────────────────────────────────────────
 
 async function renderStat() {
-  setTop('Statystyki', '', false);
+  setTop('Statystyki','',false);
   document.getElementById('content').innerHTML = '<div class="loading">Ładowanie...</div>';
-  const s = await api('GET', '/api/statystyki');
-  const max = Math.max(1, ...Object.values(s.statusy||{}));
-  const bars = Object.entries(s.statusy||{}).map(([st,cnt]) => `
+  const s = await api('GET','/api/statystyki');
+  const max = Math.max(1,...Object.values(s.statusy||{}));
+  const bars = Object.entries(s.statusy||{}).map(([st,cnt])=>`
     <div class="bar-row">
-      <div class="bar-header"><span class="bar-name">${st}</span><span class="bar-count">${cnt}</span></div>
+      <div class="bar-header"><span class="bar-name">${st}</span><span class="bar-cnt">${cnt}</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${(cnt/max*100).toFixed(0)}%"></div></div>
     </div>`).join('');
   document.getElementById('content').innerHTML = `
-    <div class="stat-card"><div class="stat-icon">📋</div><div><div class="stat-val">${s.total||0}</div><div class="stat-label">Wszystkich zleceń</div></div></div>
-    <div class="stat-card"><div class="stat-icon">📅</div><div><div class="stat-val">${s.dzisiaj||0}</div><div class="stat-label">Dzisiaj przyjętych</div></div></div>
+    <div class="stat-card"><div style="font-size:2rem">📋</div><div><div class="stat-val">${s.total||0}</div><div class="stat-label">Wszystkich zleceń</div></div></div>
+    <div class="stat-card"><div style="font-size:2rem">📅</div><div><div class="stat-val">${s.dzisiaj||0}</div><div class="stat-label">Dzisiaj przyjętych</div></div></div>
     <div class="section" style="margin-top:10px"><div class="section-title">Podział statusów</div>${bars||'<div style="color:#94a3b8;font-size:.85rem">Brak danych</div>'}</div>
     <div style="height:16px"></div>`;
 }
 
+// ─── USTAWIENIA ───────────────────────────────────────────────────────────────
+
+async function renderUstawienia() {
+  setTop('Ustawienia','',false);
+  const s = await api('GET','/api/settings').catch(()=>({}));
+  const smtpOk = !!(s.smtp_user && s.smtp_pass);
+  document.getElementById('content').innerHTML = `
+    <div class="section" style="margin-top:12px">
+      <div class="settings-item" onclick="nav('smtp')">
+        <div class="settings-item-icon">📧</div>
+        <div class="settings-item-info">
+          <div class="settings-item-title">E-mail (SMTP)</div>
+          <div class="settings-item-sub">${smtpOk ? '✓ Skonfigurowany: '+s.smtp_user : 'Nie skonfigurowany'}</div>
+        </div>
+        <div class="settings-item-arrow">›</div>
+      </div>
+      <div class="settings-item" onclick="nav('mechanicy-edit')">
+        <div class="settings-item-icon">👷</div>
+        <div class="settings-item-info">
+          <div class="settings-item-title">Mechanicy</div>
+          <div class="settings-item-sub">${mechanicy.length} mechanik${mechanicy.length===1?'':'ów'}</div>
+        </div>
+        <div class="settings-item-arrow">›</div>
+      </div>
+    </div>
+    ${s.public_url ? `<div class="section"><div class="section-title">Adres publiczny</div><div style="font-family:monospace;font-size:.8rem;color:#64748b;word-break:break-all">${s.public_url}</div></div>` : ''}
+    <div style="height:16px"></div>`;
+}
+
+// ─── SMTP ─────────────────────────────────────────────────────────────────────
+
+async function renderSmtp() {
+  setTop('Ustawienia e-mail','',true);
+  const s = await api('GET','/api/settings').catch(()=>({}));
+  document.getElementById('content').innerHTML = `
+    <div class="section" style="margin-top:12px">
+      <div class="section-title">Konto Gmail</div>
+      <div class="field"><label>Adres e-mail</label><input id="s-user" type="email" value="${esc(s.smtp_user)}" placeholder="twoj@gmail.com"></div>
+      <div class="field"><label>Hasło aplikacji (App Password)</label><input id="s-pass" type="password" value="${esc(s.smtp_pass)}" placeholder="16-znakowe hasło z Google"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Serwer SMTP</div>
+      <div class="field"><label>Host</label><input id="s-host" value="${esc(s.smtp_host)||'smtp.gmail.com'}"></div>
+      <div class="field"><label>Port</label><input id="s-port" type="number" value="${s.smtp_port||587}"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Adres publiczny (opcjonalnie)</div>
+      <div class="field"><label>URL</label><input id="s-url" type="url" value="${esc(s.public_url)}" placeholder="np. https://xyz.trycloudflare.com"></div>
+      <p style="font-size:.75rem;color:#94a3b8;margin-top:-4px">Jeśli używasz tunelu Cloudflare, wpisz tu jego adres</p>
+    </div>
+    <div style="padding:12px">
+      <button class="btn-green" onclick="zapiszSmtp()">Zapisz ustawienia</button>
+    </div>
+    <div style="height:16px"></div>`;
+}
+
+async function zapiszSmtp() {
+  await api('PUT','/api/settings',{
+    smtp_user: v('s-user'), smtp_pass: v('s-pass'),
+    smtp_host: v('s-host')||'smtp.gmail.com',
+    smtp_port: parseInt(document.getElementById('s-port').value)||587,
+    public_url: v('s-url'),
+  });
+  toast('Zapisano ✓');
+  goBack();
+}
+
+// ─── MECHANICY EDIT ───────────────────────────────────────────────────────────
+
+async function renderMechanicyEdit() {
+  setTop('Mechanicy','',true);
+  mechanicy = await api('GET','/api/mechanicy');
+  const liHtml = mechanicy.length
+    ? mechanicy.map(m => `
+      <div class="mech-item">
+        <span class="mech-dot" style="background:${m.kolor||'#16a34a'}"></span>
+        <span style="flex:1;font-weight:700">${m.nazwa}</span>
+        <button class="btn-sm btn-sm-red" onclick="usunMechanika(${m.id})">Usuń</button>
+      </div>`).join('')
+    : '<div style="color:#94a3b8;font-size:.85rem;padding:4px 0">Brak mechaników</div>';
+
+  document.getElementById('content').innerHTML = `
+    <div class="section" style="margin-top:12px">
+      <div class="section-title">Lista mechaników</div>
+      <div id="mechList">${liHtml}</div>
+    </div>
+    <div style="padding:12px">
+      <button class="btn-green" onclick="nav('dodaj-mech')">+ Dodaj mechanika</button>
+    </div>
+    <div style="height:16px"></div>`;
+}
+
+async function usunMechanika(id) {
+  if (!confirm('Usunąć tego mechanika?')) return;
+  await api('DELETE', `/api/mechanicy/${id}`);
+  mechanicy = mechanicy.filter(m => m.id !== id);
+  toast('Usunięto');
+  renderMechanicyEdit();
+}
+
+// ─── DODAJ MECHANIKA ──────────────────────────────────────────────────────────
+
+function renderDodajMechanika() {
+  setTop('Dodaj mechanika','',true);
+  const colors = ['#16a34a','#2563eb','#dc2626','#d97706','#7c3aed','#0891b2','#be185d','#65a30d'];
+  let selColor = colors[0];
+  const colorBtns = colors.map(c =>
+    `<div onclick="selColor('${c}')" id="col-${c.replace('#','')}" style="width:36px;height:36px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${c===selColor?'#1e293b':'transparent'}"></div>`
+  ).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="section" style="margin-top:12px">
+      <div class="field"><label>Imię i nazwisko</label><input id="m-nazwa" placeholder="np. Tomasz Kowalski"></div>
+      <div class="section-title" style="margin-bottom:10px">Kolor</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap" id="colorGrid">${colorBtns}</div>
+    </div>
+    <div style="padding:12px">
+      <button class="btn-green" onclick="dodajMechanika()">+ Dodaj</button>
+    </div>
+    <div style="height:16px"></div>`;
+
+  window._selColor = colors[0];
+}
+
+function selColor(c) {
+  window._selColor = c;
+  document.querySelectorAll('#colorGrid > div').forEach(el => el.style.borderColor = 'transparent');
+  document.getElementById('col-'+c.replace('#',''))?.style.setProperty('border-color','#1e293b');
+}
+
+async function dodajMechanika() {
+  const nazwa = v('m-nazwa');
+  if (!nazwa) { toast('Wpisz imię i nazwisko'); return; }
+  const res = await api('POST','/api/mechanicy',{ nazwa, kolor: window._selColor||'#16a34a' });
+  if (res?.id) {
+    mechanicy = await api('GET','/api/mechanicy');
+    toast('Mechanik dodany ✓');
+    goBack();
+  }
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+function v(id) { return document.getElementById(id)?.value?.trim()||''; }
+function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 (async () => {
-  mechanicy = await api('GET', '/api/mechanicy').catch(() => []);
+  mechanicy = await api('GET','/api/mechanicy').catch(()=>[]);
   render();
 })();
 </script>

@@ -272,7 +272,31 @@ function sendJson(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-function handleApi(pathname, method, query, body, res) {
+async function handleApi(pathname, method, query, body, res) {
+
+  // ── settings API ──
+  if (pathname === '/api/settings') {
+    if (method === 'GET') {
+      const s = { ...db.settings };
+      delete s.apilo_access_token; delete s.apilo_refresh_token; delete s.apilo_token_expires;
+      return sendJson(res, s);
+    }
+    if (method === 'PUT') {
+      const allowed = ['smtp_host','smtp_port','smtp_user','smtp_pass','public_url','apilo_url','apilo_client_id','apilo_client_secret'];
+      allowed.forEach(k => { if (k in body) db.settings[k] = body[k]; });
+      saveDB();
+      return sendJson(res, { success: true });
+    }
+  }
+
+  // ── email send ──
+  const emailM = pathname.match(/^\/api\/email\/(\d+)$/);
+  if (emailM && method === 'POST') {
+    const z = db.zlecenia.find(z => z.id === parseInt(emailM[1]));
+    if (!z) return sendJson(res, { ok: false, error: 'Nie znaleziono zlecenia' }, 404);
+    const result = await sendTrackingEmail(z);
+    return sendJson(res, result);
+  }
   // ── mechanicy ──
   if (pathname === '/api/mechanicy') {
     if (method === 'GET') return sendJson(res, db.mechanicy);
@@ -507,10 +531,11 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#1e293b;paddin
     if (pathname.startsWith('/api')) {
       let body = '';
       req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      req.on('end', async () => {
         let data = {};
         try { if (body) data = JSON.parse(body); } catch (e) {}
-        handleApi(pathname, req.method, parsed.query, data, res);
+        try { await handleApi(pathname, req.method, parsed.query, data, res); }
+        catch (e) { sendJson(res, { error: String(e.message) }, 500); }
       });
       return;
     }
