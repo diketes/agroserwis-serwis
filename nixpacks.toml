@@ -1,0 +1,5 @@
+[phases.install]
+cmds = ["cd cloud && npm install"]
+
+[start]
+cmd = "node cloud/server.js"
