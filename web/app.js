@@ -805,20 +805,34 @@ async function submitNowe() {
 async function renderMechanicy() {
   mechanicyCache = await hybridGetMechanicy();
   const allZ = await hybridGetZlecenia({ status: 'Wszystkie', mechanik_id: 'wszyscy' });
+  const settings = await apiFetch('GET', '/api/settings').catch(() => ({}));
+  const publicUrl = (settings.public_url || API_BASE || '').replace(/\/$/, '');
   const content = document.getElementById('content');
   content.innerHTML = `
     <div class="mechanics-wrap">
       ${mechanicyCache.length ? mechanicyCache.map(m => {
         const active = allZ.filter(z => z.mechanik_id === m.id && z.status !== 'Wydano').length;
-        return `<div class="mechanic-item">
-          <div class="mechanic-avatar" style="background:${m.kolor}">${initials(m.nazwa)}</div>
-          <div style="flex:1"><div class="mechanic-name">${m.nazwa}</div><div class="mechanic-orders">${active > 0 ? `${active} aktywnych` : 'brak aktywnych'}</div></div>
-          <button class="btn-icon" onclick="usunMechanika(${m.id})">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-              <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-            </svg>
-          </button>
+        const loginUrl = publicUrl ? `${publicUrl}/mobile?m=${m.id}` : '';
+        const qrUrl = loginUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(loginUrl)}` : '';
+        return `<div class="mechanic-item" style="flex-direction:column;align-items:stretch;gap:0;padding:0">
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 16px">
+            <div class="mechanic-avatar" style="background:${m.kolor}">${initials(m.nazwa)}</div>
+            <div style="flex:1"><div class="mechanic-name">${m.nazwa}</div><div class="mechanic-orders">${active > 0 ? `${active} aktywnych` : 'brak aktywnych'}</div></div>
+            <button class="btn-icon" onclick="usunMechanika(${m.id})">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+              </svg>
+            </button>
+          </div>
+          ${qrUrl ? `<div style="border-top:1px solid #f1f5f9;padding:12px 16px;display:flex;align-items:center;gap:16px;background:#fafafa;border-radius:0 0 12px 12px">
+            <img src="${qrUrl}" width="80" height="80" style="border-radius:6px;border:1px solid #e2e8f0">
+            <div>
+              <div style="font-size:.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:4px">Kod do telefonu</div>
+              <div style="font-family:monospace;font-size:1.6rem;font-weight:900;color:#1e293b;letter-spacing:.1em">${String(m.id).padStart(2,'0')}</div>
+              <div style="font-size:.72rem;color:#64748b;margin-top:2px">Skanuj QR lub wpisz kod w aplikacji</div>
+            </div>
+          </div>` : `<div style="border-top:1px solid #f1f5f9;padding:10px 16px;font-size:.75rem;color:#94a3b8;background:#fafafa;border-radius:0 0 12px 12px">Ustaw adres publiczny w ustawieniach aby wyświetlić kod QR</div>`}
         </div>`;
       }).join('') : `<div style="text-align:center;color:var(--slate-400);padding:24px;font-size:.85rem">Brak mechaników</div>`}
       <div class="add-form-card">

@@ -249,14 +249,23 @@ function renderLogin() {
     return;
   }
   const cards = mechanicy.map(m => `
-    <div onclick="loginAs(${m.id})" style="background:#fff;border-radius:16px;padding:18px 20px;margin:0 12px 10px;box-shadow:0 1px 6px rgba(0,0,0,.09);display:flex;align-items:center;gap:14px;cursor:pointer;transition:transform .1s;active-transform:scale(.97)">
+    <div onclick="loginAs(${m.id})" style="background:#fff;border-radius:16px;padding:18px 20px;margin:0 12px 10px;box-shadow:0 1px 6px rgba(0,0,0,.09);display:flex;align-items:center;gap:14px;cursor:pointer">
       <div style="width:48px;height:48px;border-radius:50%;background:${m.kolor||'#16a34a'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;font-weight:900;flex-shrink:0">${(m.nazwa||'?')[0].toUpperCase()}</div>
       <div style="flex:1"><div style="font-size:1rem;font-weight:800;color:#1e293b">${m.nazwa}</div><div style="font-size:.78rem;color:#94a3b8;margin-top:2px">Mechanik</div></div>
-      <div style="color:#cbd5e1;font-size:1.4rem">›</div>
+      <div style="font-family:monospace;font-size:1.1rem;font-weight:900;color:#cbd5e1">${String(m.id).padStart(2,'0')}</div>
     </div>`).join('');
   c.innerHTML = `
     <div style="padding:24px 0 10px;text-align:center;color:#64748b;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Wybierz konto</div>
     ${cards}
+    <div style="padding:8px 12px 0">
+      <div style="background:#fff;border-radius:16px;padding:16px;box-shadow:0 1px 6px rgba(0,0,0,.07)">
+        <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:8px">Wpisz kod z komputera</div>
+        <div style="display:flex;gap:8px">
+          <input id="loginCodeInput" type="number" placeholder="np. 01" style="flex:1;border:2px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:1.1rem;font-family:monospace;font-weight:700;outline:none;text-align:center" onkeydown="if(event.key==='Enter')loginByCode()">
+          <button onclick="loginByCode()" style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:800;font-size:.9rem;cursor:pointer">Wejdź</button>
+        </div>
+      </div>
+    </div>
     <div style="padding:10px 12px 0"><button class="btn-gray" onclick="loginAsAdmin()">🔧 Wejdź jako administrator</button></div>
     <div style="height:24px"></div>`;
 }
@@ -269,6 +278,14 @@ function loginAs(mechId) {
   filterMoje = true;
   document.getElementById('bottomnav').style.display = 'flex';
   nav('lista');
+}
+
+function loginByCode() {
+  const code = parseInt(document.getElementById('loginCodeInput')?.value);
+  if (!code) { toast('Wpisz numer kodu'); return; }
+  const m = mechanicy.find(x => x.id === code);
+  if (!m) { toast('Nieznany kod — sprawdź numer'); return; }
+  loginAs(m.id);
 }
 
 function loginAsAdmin() {
@@ -862,6 +879,14 @@ function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
 async function init() {
   mechanicy = await api('GET','/api/mechanicy').catch(()=>[]);
+
+  // Auto-login przez URL param ?m=ID (z kodu QR lub wpisanego kodu)
+  const urlM = new URLSearchParams(location.search).get('m');
+  if (urlM) {
+    localStorage.setItem('currentMechId', urlM);
+    history.replaceState(null, '', location.pathname);
+  }
+
   const savedId = localStorage.getItem('currentMechId');
   if (savedId) {
     const m = mechanicy.find(x => x.id === parseInt(savedId));
@@ -873,7 +898,6 @@ async function init() {
       return;
     }
   }
-  // brak zapisanego konta — pokaż ekran wyboru
   renderLogin();
 }
 

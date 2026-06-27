@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private String serverUrl;
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraOutputUri;
+    private String pendingMechId;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -123,6 +124,15 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (pendingMechId != null) {
+                    view.evaluateJavascript(
+                        "localStorage.setItem('currentMechId','" + pendingMechId + "');location.reload();",
+                        null);
+                    pendingMechId = null;
+                }
+            }
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
@@ -224,6 +234,8 @@ public class MainActivity extends AppCompatActivity {
                 serverUrl = url;
                 getSharedPreferences(PREFS, MODE_PRIVATE)
                         .edit().putString(KEY_URL, url).apply();
+                String mechId = data.getStringExtra("mech_id");
+                if (mechId != null) pendingMechId = mechId;
                 showWebView();
                 return;
             }

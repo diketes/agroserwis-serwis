@@ -141,15 +141,19 @@ public class ScanActivity extends AppCompatActivity {
 
     private void returnUrl(String rawUrl) {
         try {
-            java.net.URL url = new java.net.URL(rawUrl);
-            int port = url.getPort();
-            String base = url.getProtocol() + "://" + url.getHost() + (port > 0 ? ":" + port : "");
+            android.net.Uri uri = android.net.Uri.parse(rawUrl);
+            String mechId = uri.getQueryParameter("m");
+            int port = uri.getPort();
+            String base = uri.getScheme() + "://" + uri.getHost() + (port > 0 ? ":" + port : "");
             Intent intent = new Intent();
             intent.putExtra("server_url", base);
+            if (mechId != null && !mechId.isEmpty()) {
+                intent.putExtra("mech_id", mechId);
+            }
             setResult(RESULT_OK, intent);
         } catch (Exception e) {
             Intent intent = new Intent();
-            intent.putExtra("server_url", rawUrl.replaceAll("/+$", ""));
+            intent.putExtra("server_url", rawUrl.replaceAll("[?#].*", "").replaceAll("/+$", ""));
             setResult(RESULT_OK, intent);
         }
         finish();
