@@ -888,14 +888,57 @@ async function savePhoto() {
 // ── Phone modal ────────────────────────────────────────────────────────
 async function openPhoneModal() {
   document.getElementById('phoneModal').classList.remove('d-none');
-  const info = await window.api.server.info();
-  document.getElementById('phoneUrl').textContent = info.url;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(info.url)}`;
-  const img = new Image(180, 180);
-  img.style.borderRadius = '12px';
-  img.src = qrUrl;
-  document.getElementById('phoneQR').innerHTML = '';
-  document.getElementById('phoneQR').appendChild(img);
+  document.getElementById('phoneQR').innerHTML = '<div style="color:#94a3b8;text-align:center;padding:20px">Ładowanie...</div>';
+
+  const [info, settings, mechanicy] = await Promise.all([
+    window.api.server.info(),
+    window.api.settings.pobierz().catch(() => ({})),
+    window.api.mechanicy.lista().catch(() => []),
+  ]);
+
+  // Preferuj Railway (publicUrl) — działa gdy komputer wyłączony
+  const cloudUrl = (settings.public_url || '').replace(/\/$/, '');
+  const localUrl = info.url;
+  const baseUrl  = cloudUrl || localUrl;
+  const isCloud  = !!cloudUrl;
+
+  function qrImg(url, size = 150) {
+    return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}" width="${size}" height="${size}" style="border-radius:10px;border:1px solid #e2e8f0;display:block">`;
+  }
+
+  const mechCards = mechanicy.map(m => {
+    const url = `${baseUrl}?m=${m.id}`;
+    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;display:flex;align-items:center;gap:14px">
+      ${qrImg(url, 100)}
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="width:12px;height:12px;border-radius:50%;background:${m.kolor||'#16a34a'};flex-shrink:0"></div>
+          <div style="font-weight:800;font-size:1rem">${m.nazwa}</div>
+        </div>
+        <div style="font-family:monospace;font-size:1.5rem;font-weight:900;color:#1e293b;letter-spacing:.1em">${String(m.id).padStart(2,'0')}</div>
+        <div style="font-size:.7rem;color:#94a3b8;margin-top:3px">Skanuj QR lub wpisz kod w aplikacji</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const adminUrl = `${baseUrl}?m=admin`;
+  const cloudNote = isCloud
+    ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#15803d;margin-bottom:14px;text-align:center">✓ Używa Railway — działa bez komputera</div>`
+    : `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:14px;text-align:center">⚠ Lokalny adres — wymaga WiFi z komputerem.<br>Ustaw adres Railway w Ustawieniach → SMTP → Adres publiczny.</div>`;
+
+  document.getElementById('phoneUrl').textContent = baseUrl;
+  document.getElementById('phoneQR').innerHTML = `
+    ${cloudNote}
+    <div style="text-align:center;margin-bottom:16px;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px">
+      <div style="font-size:.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px">Administrator — pełny dostęp</div>
+      ${qrImg(adminUrl, 170)}
+      <div style="font-size:.7rem;color:#94a3b8;margin-top:8px">Skanuj telefonem → natychmiastowy pełny dostęp</div>
+    </div>
+    ${mechanicy.length ? `
+      <div style="font-size:.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:8px">Konta mechaników</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${mechCards}</div>
+    ` : ''}
+  `;
 }
 function closePhoneModal() { document.getElementById('phoneModal').classList.add('d-none'); }
 

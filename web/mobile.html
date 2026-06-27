@@ -880,14 +880,25 @@ function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 async function init() {
   mechanicy = await api('GET','/api/mechanicy').catch(()=>[]);
 
-  // Auto-login przez URL param ?m=ID (z kodu QR lub wpisanego kodu)
+  // Auto-login przez URL param ?m=ID lub ?m=admin (z kodu QR lub wpisanego kodu)
   const urlM = new URLSearchParams(location.search).get('m');
   if (urlM) {
-    localStorage.setItem('currentMechId', urlM);
     history.replaceState(null, '', location.pathname);
+    if (urlM === 'admin') {
+      document.getElementById('bottomnav').style.display = 'flex';
+      loginAsAdmin();
+      return;
+    }
+    localStorage.setItem('currentMechId', urlM);
   }
 
   const savedId = localStorage.getItem('currentMechId');
+  if (savedId === 'admin') {
+    localStorage.removeItem('currentMechId');
+    document.getElementById('bottomnav').style.display = 'flex';
+    loginAsAdmin();
+    return;
+  }
   if (savedId) {
     const m = mechanicy.find(x => x.id === parseInt(savedId));
     if (m) {
