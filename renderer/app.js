@@ -923,10 +923,12 @@ async function openPhoneModal() {
 
   const adminUrl = `${baseUrl}?m=admin`;
   const cloudNote = isCloud
-    ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#15803d;margin-bottom:14px;text-align:center">✓ Używa Railway — działa bez komputera</div>`
-    : `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:14px;text-align:center">⚠ Lokalny adres — wymaga WiFi z komputerem.<br>Ustaw adres Railway w Ustawieniach → SMTP → Adres publiczny.</div>`;
-
-  document.getElementById('phoneUrl').textContent = baseUrl;
+    ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#15803d;margin-bottom:14px;text-align:center">✓ Używa Railway — działa bez komputera i bez WiFi</div>`
+    : `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:.78rem;color:#92400e;margin-bottom:14px;text-align:center">
+        ⚠ Lokalny adres — wymaga tej samej sieci WiFi.<br>
+        <span style="font-family:monospace;font-size:.85rem;font-weight:700">${localUrl}</span><br>
+        <span style="font-size:.7rem">Aby działało bez WiFi: Ustawienia → SMTP → Adres publiczny Railway</span>
+      </div>`;
   document.getElementById('phoneQR').innerHTML = `
     ${cloudNote}
     <div style="text-align:center;margin-bottom:16px;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px">

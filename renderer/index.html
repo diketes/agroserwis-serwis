@@ -90,10 +90,8 @@
         <div class="modal-title">📱 Połącz telefon</div>
         <button class="btn-close-modal" onclick="closePhoneModal()">×</button>
       </div>
-      <div id="phoneQR" style="display:flex;justify-content:center;margin:20px 0 12px"></div>
-      <div style="text-align:center;font-size:.75rem;color:var(--slate-400);margin-bottom:6px">lub wpisz ręcznie w telefonie:</div>
-      <div id="phoneUrl" style="text-align:center;font-family:monospace;font-size:1rem;font-weight:800;color:var(--green-600);padding:10px;background:var(--slate-50);border-radius:10px"></div>
-      <div style="margin-top:12px;font-size:.75rem;color:var(--slate-400);text-align:center">Oba urządzenia muszą być w tej samej sieci WiFi</div>
+      <div id="phoneQR" style="margin:16px 0"></div>
+      <div id="phoneUrl" style="display:none"></div>
     </div>
   </div>
 
@@ -194,13 +192,13 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">Publiczny adres serwera</div>
+        <div class="settings-section-title">Adres Railway (aplikacja na telefon)</div>
         <div class="settings-hint">
-          Link w e-mailu musi być dostępny z internetu. Zostaw puste jeśli klienci są w tej samej sieci co komputer warsztatu (lokalny adres IP). Jeśli chcesz dostęp z zewnątrz — wpisz publiczne IP lub domenę, np. <code>http://1.2.3.4:3737</code>
+          Wpisz adres Railway żeby aplikacja na telefon działała <strong>bez komputera i bez WiFi</strong>. Np. <code>https://agroserwis-serwis-production.up.railway.app</code> — znajdziesz go w panelu railway.app po wdrożeniu.
         </div>
         <div class="form-group">
-          <label class="form-label">Publiczny URL (opcjonalnie)</label>
-          <input class="form-control" id="set-public-url" placeholder="http://1.2.3.4:3737">
+          <label class="form-label">Adres Railway</label>
+          <input class="form-control" id="set-public-url" placeholder="https://twoj-projekt.up.railway.app">
         </div>
       </div>
 
