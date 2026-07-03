@@ -1084,8 +1084,8 @@ async function renderSklep() {
       <td style="padding:10px 12px;white-space:nowrap">
         ${p.status === 'oczekuje'   ? `<button class="btn btn-outline btn-sm" onclick="sklepStatus(${p.id},'zamowione')">✓ Zamówione</button>` : ''}
         ${p.status === 'zamowione'  ? `<button class="btn btn-outline btn-sm" style="border-color:#16a34a;color:#16a34a" onclick="sklepStatus(${p.id},'dostarczone')">✓ Dostarczone</button>` : ''}
-        ${p.status === 'dostarczone'? `<span style="font-size:.78rem;color:#16a34a;font-weight:700">✓ Zrealizowane</span>` : ''}
-        <button class="btn btn-sm" style="margin-left:4px;background:none;border:1px solid #fecaca;color:#ef4444;padding:4px 8px;border-radius:6px" onclick="sklepUsun(${p.id})">🗑</button>
+        ${p.status !== 'oczekuje'   ? `<button class="btn btn-sm" style="background:none;border:1px solid #e2e8f0;color:#64748b;padding:3px 7px;border-radius:6px;font-size:.72rem" onclick="sklepStatus(${p.id},'oczekuje')" title="Cofnij do oczekujących">↩</button>` : ''}
+        <button class="btn btn-sm" style="margin-left:2px;background:none;border:1px solid #fecaca;color:#ef4444;padding:4px 8px;border-radius:6px" onclick="sklepUsun(${p.id})">🗑</button>
       </td>
     </tr>`;
   }
