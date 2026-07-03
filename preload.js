@@ -69,4 +69,11 @@ contextBridge.exposeInMainWorld('api', {
     generuj: (data)     => ipcRenderer.invoke('api-keys:generuj', data),
     usun:    (key)      => ipcRenderer.invoke('api-keys:usun', key),
   },
+  sklep: {
+    lista:        (p)    => ipcRenderer.invoke('sklep:lista', p),
+    zamow:        (data) => ipcRenderer.invoke('sklep:zamow', data),
+    aktualizuj:   (data) => ipcRenderer.invoke('sklep:aktualizuj', data),
+    usun:         (id)   => ipcRenderer.invoke('sklep:usun', id),
+    wyslijEmail:  ()     => ipcRenderer.invoke('sklep:wyslij-email'),
+  },
 });

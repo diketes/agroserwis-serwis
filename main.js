@@ -51,6 +51,7 @@ const DEFAULT_SETTINGS = {
   allegro_client_secret: '',
   shoper_url: '',
   shoper_api_key: '',
+  shop_email_to: '',
 };
 
 function loadDB() {
@@ -59,8 +60,10 @@ function loadDB() {
     if (!db.mechanicy) db.mechanicy = [];
     if (!db.zdjecia)   db.zdjecia   = [];
     if (!db.settings)  db.settings  = { ...DEFAULT_SETTINGS };
-    if (!db.nextId.mechanicy) db.nextId.mechanicy = 1;
-    if (!db.nextId.zdjecia)   db.nextId.zdjecia   = 1;
+    if (!db.nextId.mechanicy)     db.nextId.mechanicy     = 1;
+    if (!db.nextId.zdjecia)       db.nextId.zdjecia       = 1;
+    if (!db.zamowienia_czesci)    db.zamowienia_czesci    = [];
+    if (!db.nextId.zamowienia_czesci) db.nextId.zamowienia_czesci = 1;
     // Merge any missing setting keys
     Object.keys(DEFAULT_SETTINGS).forEach(k => {
       if (!(k in db.settings)) db.settings[k] = DEFAULT_SETTINGS[k];
@@ -71,9 +74,9 @@ function loadDB() {
     if (tokenAdded) saveDB();
   } else {
     db = {
-      zlecenia: [], czesci: [], mechanicy: [], zdjecia: [],
+      zlecenia: [], czesci: [], mechanicy: [], zdjecia: [], zamowienia_czesci: [],
       settings: { ...DEFAULT_SETTINGS },
-      nextId: { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1 },
+      nextId: { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1, zamowienia_czesci: 1 },
     };
     saveDB();
   }
@@ -406,6 +409,55 @@ async function handleApi(pathname, method, query, body, res, req) {
     db.settings.api_keys = (db.settings.api_keys || []).filter(k => k.key !== keyToDelete);
     saveDB();
     return sendJson(res, { success: true });
+  }
+
+  // ── zamówienia części (Sklep) ────────────────────────────────────────
+  if (pathname === '/api/zamowienia-czesci' && method === 'GET') {
+    const status = query.status;
+    let wynik = [...(db.zamowienia_czesci || [])];
+    if (status && status !== 'wszystkie') wynik = wynik.filter(z => z.status === status);
+    return sendJson(res, wynik.sort((a, b) => b.id - a.id));
+  }
+  if (pathname === '/api/zamowienia-czesci' && method === 'POST') {
+    if (!body.nazwa_czesci || !body.zlecenie_id) return sendJson(res, { error: 'Brak danych' }, 400);
+    const z = db.zlecenia.find(z => z.id === parseInt(body.zlecenie_id));
+    const mech = db.mechanicy.find(m => m.id === parseInt(body.mechanik_id));
+    const id = db.nextId.zamowienia_czesci++;
+    const zam = {
+      id,
+      zlecenie_id: parseInt(body.zlecenie_id),
+      numer_zlecenia: z ? z.numer : '—',
+      klient_nazwa: z ? z.klient_nazwa : '',
+      marka: z ? (z.marka || '') : '',
+      model: z ? (z.model || '') : '',
+      nazwa_czesci: body.nazwa_czesci,
+      ilosc: parseInt(body.ilosc) || 1,
+      uwagi: body.uwagi || '',
+      mechanik_id: parseInt(body.mechanik_id) || null,
+      mechanik_nazwa: mech ? mech.nazwa : (body.mechanik_nazwa || ''),
+      status: 'oczekuje',
+      created_at: new Date().toISOString(),
+    };
+    if (!db.zamowienia_czesci) db.zamowienia_czesci = [];
+    db.zamowienia_czesci.push(zam);
+    saveDB();
+    return sendJson(res, { id }, 201);
+  }
+  const zamM = pathname.match(/^\/api\/zamowienia-czesci\/(\d+)$/);
+  if (zamM) {
+    const id = parseInt(zamM[1]);
+    if (method === 'PUT') {
+      const idx = (db.zamowienia_czesci || []).findIndex(z => z.id === id);
+      if (idx === -1) return sendJson(res, { error: 'Nie znaleziono' }, 404);
+      if (body.status) db.zamowienia_czesci[idx].status = body.status;
+      saveDB();
+      return sendJson(res, { success: true });
+    }
+    if (method === 'DELETE') {
+      db.zamowienia_czesci = (db.zamowienia_czesci || []).filter(z => z.id !== id);
+      saveDB();
+      return sendJson(res, { success: true });
+    }
   }
 
   // ── settings API ──
@@ -968,7 +1020,8 @@ ipcMain.handle('settings:pobierz', () => ({ ...db.settings }));
 ipcMain.handle('settings:zapisz', (_, data) => {
   const allowed = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'public_url',
     'apilo_url', 'apilo_client_id', 'apilo_client_secret',
-    'allegro_client_id', 'allegro_client_secret', 'shoper_url', 'shoper_api_key'];
+    'allegro_client_id', 'allegro_client_secret', 'shoper_url', 'shoper_api_key',
+    'shop_email_to'];
   allowed.forEach(k => { if (k in data) db.settings[k] = data[k]; });
   saveDB();
   return { success: true };
@@ -996,6 +1049,123 @@ ipcMain.handle('api-keys:usun', (_, key) => {
   db.settings.api_keys = (db.settings.api_keys || []).filter(k => k.key !== key);
   saveDB();
   return { success: true };
+});
+
+// ── Sklep — zamówienia części ──────────────────────────────────────────
+
+ipcMain.handle('sklep:lista', (_, params = {}) => {
+  let wynik = [...(db.zamowienia_czesci || [])];
+  if (params.status && params.status !== 'wszystkie') {
+    wynik = wynik.filter(z => z.status === params.status);
+  }
+  return wynik.sort((a, b) => b.id - a.id);
+});
+
+ipcMain.handle('sklep:zamow', (_, data) => {
+  const z = db.zlecenia.find(z => z.id === parseInt(data.zlecenie_id));
+  const mech = db.mechanicy.find(m => m.id === parseInt(data.mechanik_id));
+  const id = (db.nextId.zamowienia_czesci = (db.nextId.zamowienia_czesci || 1));
+  db.nextId.zamowienia_czesci++;
+  const zam = {
+    id,
+    zlecenie_id: parseInt(data.zlecenie_id),
+    numer_zlecenia: z ? z.numer : '—',
+    klient_nazwa: z ? z.klient_nazwa : '',
+    marka: z ? (z.marka || '') : '',
+    model: z ? (z.model || '') : '',
+    nazwa_czesci: data.nazwa_czesci,
+    ilosc: parseInt(data.ilosc) || 1,
+    uwagi: data.uwagi || '',
+    mechanik_id: parseInt(data.mechanik_id) || null,
+    mechanik_nazwa: mech ? mech.nazwa : (data.mechanik_nazwa || ''),
+    status: 'oczekuje',
+    created_at: new Date().toISOString(),
+  };
+  if (!db.zamowienia_czesci) db.zamowienia_czesci = [];
+  db.zamowienia_czesci.push(zam);
+  saveDB();
+  return { id };
+});
+
+ipcMain.handle('sklep:aktualizuj', (_, { id, status }) => {
+  const idx = (db.zamowienia_czesci || []).findIndex(z => z.id === id);
+  if (idx !== -1) { db.zamowienia_czesci[idx].status = status; saveDB(); }
+  return { success: true };
+});
+
+ipcMain.handle('sklep:usun', (_, id) => {
+  db.zamowienia_czesci = (db.zamowienia_czesci || []).filter(z => z.id !== id);
+  saveDB();
+  return { success: true };
+});
+
+ipcMain.handle('sklep:wyslij-email', async () => {
+  const s = db.settings;
+  if (!s.smtp_user || !s.smtp_pass) return { ok: false, error: 'Brak konfiguracji SMTP w Ustawieniach' };
+  if (!s.shop_email_to) return { ok: false, error: 'Brak adresu email dostawcy — ustaw w Ustawieniach → Sklep' };
+  const oczekujace = (db.zamowienia_czesci || []).filter(z => z.status === 'oczekuje');
+  if (!oczekujace.length) return { ok: false, error: 'Brak oczekujących zamówień do wysłania' };
+
+  const dateStr = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const listeHtml = oczekujace.map((p, i) => `
+    <tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:8px 12px;font-size:.9rem">${i+1}</td>
+      <td style="padding:8px 12px;font-weight:700">${p.nazwa_czesci}</td>
+      <td style="padding:8px 12px;text-align:center">${p.ilosc}</td>
+      <td style="padding:8px 12px;color:#64748b;font-size:.85rem">${p.numer_zlecenia}${p.marka ? ' · ' + [p.marka, p.model].filter(Boolean).join(' ') : ''}</td>
+      <td style="padding:8px 12px;color:#64748b;font-size:.85rem">${p.mechanik_nazwa || '—'}</td>
+      <td style="padding:8px 12px;color:#64748b;font-size:.82rem">${p.uwagi || ''}</td>
+    </tr>
+  `).join('');
+
+  const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
+<style>body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:0}
+.wrap{max-width:700px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+.head{background:linear-gradient(135deg,#16a34a,#15803d);padding:24px 28px;color:#fff}
+.body{padding:28px}table{width:100%;border-collapse:collapse}th{background:#f8fafc;padding:8px 12px;font-size:.78rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;text-align:left}
+</style></head><body>
+<div class="wrap">
+  <div class="head">
+    <div style="font-size:1.1rem;font-weight:900">Agroserwis Nysa — Zamówienie części</div>
+    <div style="font-size:.8rem;opacity:.8;margin-top:4px">Data: ${dateStr} · Pozycji: ${oczekujace.length}</div>
+  </div>
+  <div class="body">
+    <p style="color:#475569;margin-bottom:20px">Prosimy o wycenę lub dostarczenie poniższych części serwisowych:</p>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Część</th><th>Ilość</th><th>Zlecenie / Maszyna</th><th>Mechanik</th><th>Uwagi</th>
+      </tr></thead>
+      <tbody>${listeHtml}</tbody>
+    </table>
+    <p style="margin-top:24px;font-size:.82rem;color:#94a3b8">Agroserwis Nysa · ul. Dmowskiego 2, 48-303 Nysa · Tel: 880 109 005</p>
+  </div>
+</div></body></html>`;
+
+  const port = parseInt(s.smtp_port) || 587;
+  const transporter = nodemailer.createTransport({
+    host: s.smtp_host || 'smtp.gmail.com', port,
+    secure: port === 465,
+    connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 15000,
+    auth: { user: s.smtp_user, pass: s.smtp_pass },
+    tls: { rejectUnauthorized: false },
+  });
+  try {
+    await transporter.sendMail({
+      from: `"Agroserwis Nysa — Sklep" <${s.smtp_user}>`,
+      to: s.shop_email_to,
+      subject: `Zamówienie części ${dateStr} (${oczekujace.length} poz.)`,
+      html,
+    });
+    // mark as ordered
+    oczekujace.forEach(p => {
+      const idx = db.zamowienia_czesci.findIndex(z => z.id === p.id);
+      if (idx !== -1) db.zamowienia_czesci[idx].status = 'zamowione';
+    });
+    saveDB();
+    return { ok: true, count: oczekujace.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 
 // ── E-mail ─────────────────────────────────────────────────────────────

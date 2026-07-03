@@ -153,6 +153,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="toast" id="toast"></div>
 
+<!-- MODAL: Zamów część -->
+<div id="modalZamow" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:flex-end;justify-content:center" onclick="if(event.target===this)zamknijZamow()">
+  <div style="background:white;border-radius:20px 20px 0 0;padding:20px 20px 32px;width:100%;max-width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-size:1rem;font-weight:900;color:#1e293b">📦 Zamów brakującą część</div>
+      <button onclick="zamknijZamow()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#94a3b8">×</button>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.78rem;font-weight:700;color:#64748b;display:block;margin-bottom:4px">Nazwa części *</label>
+      <input id="zc-nazwa" type="text" placeholder="np. Filtr oleju, uszczelka głowicy..." style="width:100%;padding:12px;border:2px solid #e2e8f0;border-radius:10px;font-size:.95rem;outline:none">
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.78rem;font-weight:700;color:#64748b;display:block;margin-bottom:4px">Ilość</label>
+      <input id="zc-ilosc" type="number" min="1" value="1" style="width:100%;padding:12px;border:2px solid #e2e8f0;border-radius:10px;font-size:.95rem;outline:none">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:.78rem;font-weight:700;color:#64748b;display:block;margin-bottom:4px">Uwagi (opcjonalnie)</label>
+      <input id="zc-uwagi" type="text" placeholder="np. pilne, numer katalogowy..." style="width:100%;padding:12px;border:2px solid #e2e8f0;border-radius:10px;font-size:.95rem;outline:none">
+    </div>
+    <button id="zc-btn" onclick="wyslijZamowienie()" style="width:100%;padding:14px;background:#ea580c;color:white;border:none;border-radius:12px;font-size:1rem;font-weight:800;cursor:pointer">
+      Wyślij zamówienie
+    </button>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -408,6 +433,7 @@ async function renderSzczegoly(id) {
       <div class="row"><span class="row-label">Części</span><span class="row-val">${kCz.toFixed(2)} zł</span></div>
       <div class="row"><span class="row-label" style="font-weight:800">Łącznie</span><span class="row-val" style="color:#16a34a;font-size:.95rem;font-weight:900">${kTot.toFixed(2)} zł</span></div>
       <button class="btn-outline" onclick="goSub('czesci',${z.id})">+ Zarządzaj częściami</button>
+      <button class="btn-outline" style="margin-top:8px;background:#fff7ed;border-color:#fb923c;color:#c2410c" onclick="otworzZamowCzesc(${z.id})">📦 Zamów brakującą część</button>
     </div>
     <div class="section" id="photoSection">
       <div class="section-title">Zdjęcia</div>
@@ -910,6 +936,49 @@ async function init() {
     }
   }
   renderLogin();
+}
+
+// ── Zamów część ──────────────────────────────────────────────────────
+let zamowZlecenieId = null;
+
+function otworzZamowCzesc(zlecenieId) {
+  zamowZlecenieId = zlecenieId;
+  document.getElementById('zc-nazwa').value = '';
+  document.getElementById('zc-ilosc').value = '1';
+  document.getElementById('zc-uwagi').value = '';
+  const modal = document.getElementById('modalZamow');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('zc-nazwa').focus(), 100);
+}
+
+function zamknijZamow() {
+  document.getElementById('modalZamow').style.display = 'none';
+  zamowZlecenieId = null;
+}
+
+async function wyslijZamowienie() {
+  const nazwa = document.getElementById('zc-nazwa').value.trim();
+  if (!nazwa) { document.getElementById('zc-nazwa').focus(); return; }
+  const ilosc = parseInt(document.getElementById('zc-ilosc').value) || 1;
+  const uwagi = document.getElementById('zc-uwagi').value.trim();
+  const btn = document.getElementById('zc-btn');
+  btn.disabled = true; btn.textContent = '⏳ Wysyłanie...';
+  try {
+    await api('POST', '/api/zamowienia-czesci', {
+      zlecenie_id: zamowZlecenieId,
+      nazwa_czesci: nazwa,
+      ilosc,
+      uwagi,
+      mechanik_id: currentMech ? currentMech.id : null,
+      mechanik_nazwa: currentMech ? currentMech.nazwa : 'Administrator',
+    });
+    zamknijZamow();
+    toast('Zamówienie wysłane do sklepu ✓');
+  } catch(e) {
+    toast('Błąd: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Wyślij zamówienie';
+  }
 }
 
 init();

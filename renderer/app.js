@@ -161,6 +161,7 @@ function navigate(view) {
     case 'nowe':      renderNowe(); break;
     case 'mechanicy': renderMechanicy(); break;
     case 'szczegoly': renderSzczegoly(currentZlecenieId); break;
+    case 'sklep':     renderSklep(); break;
   }
 }
 
@@ -1031,6 +1032,122 @@ async function stopTunnel() {
   await renderTunnelContent();
 }
 
+// ── Sklep ──────────────────────────────────────────────────────────────
+
+let sklepFilter = 'oczekuje';
+
+async function renderSklep() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="loading">Ładowanie...</div>';
+
+  const [wszystkie, settings] = await Promise.all([
+    window.api.sklep.lista({ status: 'wszystkie' }),
+    window.api.settings.pobierz(),
+  ]);
+
+  const oczekujace  = wszystkie.filter(z => z.status === 'oczekuje');
+  const zamowione   = wszystkie.filter(z => z.status === 'zamowione');
+  const dostarczone = wszystkie.filter(z => z.status === 'dostarczone');
+
+  // Update badge
+  const badge = document.getElementById('sklepBadge');
+  if (badge) { badge.style.display = oczekujace.length ? 'block' : 'none'; badge.textContent = oczekujace.length; }
+
+  const filtered = wszystkie.filter(z => z.status === sklepFilter);
+
+  const emailTo = settings.shop_email_to || '';
+  const canEmail = !!emailTo && oczekujace.length > 0;
+
+  function rowHtml(p) {
+    const d = new Date(p.created_at).toLocaleDateString('pl-PL', { day:'2-digit', month:'2-digit', year:'2-digit' });
+    const masz = [p.marka, p.model].filter(Boolean).join(' ') || '—';
+    const statusCls = { oczekuje: 'background:#fef3c7;color:#92400e', zamowione: 'background:#dbeafe;color:#1e40af', dostarczone: 'background:#dcfce7;color:#15803d' }[p.status] || '';
+    return `<tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:10px 12px;font-weight:800;font-size:.95rem">${p.nazwa_czesci}</td>
+      <td style="padding:10px 12px;text-align:center;font-weight:700;font-size:1rem">${p.ilosc}</td>
+      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${p.numer_zlecenia}<br><span style="color:#94a3b8">${masz}</span></td>
+      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${p.mechanik_nazwa || '—'}<br><span style="color:#94a3b8">${d}</span></td>
+      <td style="padding:10px 12px;font-size:.78rem;color:#64748b">${p.uwagi || ''}</td>
+      <td style="padding:10px 12px;white-space:nowrap">
+        ${p.status === 'oczekuje'   ? `<button class="btn btn-outline btn-sm" onclick="sklepStatus(${p.id},'zamowione')">✓ Zamówione</button>` : ''}
+        ${p.status === 'zamowione'  ? `<button class="btn btn-outline btn-sm" style="border-color:#16a34a;color:#16a34a" onclick="sklepStatus(${p.id},'dostarczone')">✓ Dostarczone</button>` : ''}
+        ${p.status === 'dostarczone'? `<span style="font-size:.78rem;color:#16a34a;font-weight:700">✓ Zrealizowane</span>` : ''}
+        <button class="btn btn-sm" style="margin-left:4px;background:none;border:1px solid #fecaca;color:#ef4444;padding:4px 8px;border-radius:6px" onclick="sklepUsun(${p.id})">🗑</button>
+      </td>
+    </tr>`;
+  }
+
+  el.innerHTML = `
+    <div style="padding:20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:gap;gap:10px">
+        <div>
+          <div style="font-size:1.1rem;font-weight:900;color:#1e293b">📦 Zamówienia części</div>
+          <div style="font-size:.8rem;color:#64748b;margin-top:2px">Mechanicy zgłaszają braki — wysyłasz email do dostawcy</div>
+        </div>
+        <button onclick="sklepWyslijEmail()" class="btn btn-primary" ${!canEmail ? 'disabled' : ''}
+          title="${!emailTo ? 'Ustaw email dostawcy w Ustawieniach' : !oczekujace.length ? 'Brak oczekujących zamówień' : ''}">
+          📧 Wyślij do dostawcy (${oczekujace.length})
+        </button>
+      </div>
+
+      ${!emailTo ? `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:.85rem;color:#92400e">
+        ⚠ Nie skonfigurowano emaila dostawcy — <a href="#" onclick="openSettings();return false" style="color:#92400e;font-weight:700">otwórz Ustawienia → Sklep</a> i wpisz adres email.
+      </div>` : ''}
+
+      <div style="display:flex;gap:6px;margin-bottom:16px">
+        ${[['oczekuje','🕐 Oczekujące',oczekujace.length,'#fef3c7','#92400e'],
+           ['zamowione','📬 Zamówione',zamowione.length,'#dbeafe','#1e40af'],
+           ['dostarczone','✅ Dostarczone',dostarczone.length,'#dcfce7','#15803d']].map(([s,l,c,bg,col]) => `
+          <button onclick="sklepFilter='${s}';renderSklep()" style="padding:6px 14px;border-radius:8px;border:2px solid ${sklepFilter===s?col:'#e2e8f0'};background:${sklepFilter===s?bg:'white'};color:${sklepFilter===s?col:'#64748b'};font-size:.82rem;font-weight:${sklepFilter===s?'800':'500'};cursor:pointer">
+            ${l} <span style="font-weight:900">${c}</span>
+          </button>`).join('')}
+      </div>
+
+      ${filtered.length === 0 ? `<div style="text-align:center;padding:48px 24px;color:#94a3b8">
+        <div style="font-size:2rem;margin-bottom:8px">📭</div>
+        <div style="font-size:.9rem">Brak pozycji w tej kategorii</div>
+      </div>` : `
+      <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Część</th>
+            <th style="padding:10px 12px;text-align:center;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Ilość</th>
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Zlecenie</th>
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Mechanik / Data</th>
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Uwagi</th>
+            <th style="padding:10px 12px"></th>
+          </tr></thead>
+          <tbody>${filtered.map(rowHtml).join('')}</tbody>
+        </table>
+      </div>`}
+    </div>
+  `;
+}
+
+async function sklepStatus(id, status) {
+  await window.api.sklep.aktualizuj({ id, status });
+  renderSklep();
+}
+
+async function sklepUsun(id) {
+  await window.api.sklep.usun(id);
+  renderSklep();
+}
+
+async function sklepWyslijEmail() {
+  const btn = document.querySelector('#content .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Wysyłanie...'; }
+  const res = await window.api.sklep.wyslijEmail();
+  if (res.ok) {
+    toast(`Email wysłany — ${res.count} pozycji oznaczonych jako zamówione`);
+    renderSklep();
+  } else {
+    toast(res.error, 'error');
+    if (btn) { btn.disabled = false; }
+    renderSklep();
+  }
+}
+
 // ── Settings ───────────────────────────────────────────────────────────
 
 async function openSettings() {
@@ -1047,6 +1164,7 @@ async function openSettings() {
   document.getElementById('set-allegro-secret').value = s.allegro_client_secret || '';
   document.getElementById('set-shoper-url').value = s.shoper_url || '';
   document.getElementById('set-shoper-key').value = s.shoper_api_key || '';
+  document.getElementById('set-shop-email-to').value = s.shop_email_to || '';
   // Show connection status
   const status = await window.api.apilo.status();
   const bar = document.getElementById('apiloStatusBar');
@@ -1182,6 +1300,7 @@ async function saveSettings() {
     allegro_client_secret: document.getElementById('set-allegro-secret').value.trim(),
     shoper_url:    document.getElementById('set-shoper-url').value.trim().replace(/\/$/, ''),
     shoper_api_key: document.getElementById('set-shoper-key').value.trim(),
+    shop_email_to: document.getElementById('set-shop-email-to').value.trim(),
   });
   closeSettings();
   toast('Ustawienia zapisane');
@@ -1469,4 +1588,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   mechanicyCache = await window.api.mechanicy.lista();
   await renderPickerGrid();
   showScreen('pickerScreen');
+  refreshSklepBadge();
 });
+
+async function refreshSklepBadge() {
+  const oczekujace = await window.api.sklep.lista({ status: 'oczekuje' }).catch(() => []);
+  const badge = document.getElementById('sklepBadge');
+  if (badge) { badge.style.display = oczekujace.length ? 'block' : 'none'; badge.textContent = oczekujace.length; }
+}

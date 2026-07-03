@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
   api_keys: [],
   allegro_client_id: '', allegro_client_secret: '',
   shoper_url: '', shoper_api_key: '',
+  shop_email_to: '',
 };
 
 let db;
@@ -33,18 +34,20 @@ function loadDB() {
     if (!db.mechanicy)  db.mechanicy  = [];
     if (!db.zdjecia)    db.zdjecia    = [];
     if (!db.settings)   db.settings   = { ...DEFAULT_SETTINGS };
-    if (!db.nextId)     db.nextId     = { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1 };
-    if (!db.nextId.mechanicy) db.nextId.mechanicy = 1;
-    if (!db.nextId.zdjecia)   db.nextId.zdjecia   = 1;
+    if (!db.nextId)     db.nextId     = { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1, zamowienia_czesci: 1 };
+    if (!db.nextId.mechanicy)         db.nextId.mechanicy = 1;
+    if (!db.nextId.zdjecia)           db.nextId.zdjecia   = 1;
+    if (!db.zamowienia_czesci)        db.zamowienia_czesci = [];
+    if (!db.nextId.zamowienia_czesci) db.nextId.zamowienia_czesci = 1;
     Object.keys(DEFAULT_SETTINGS).forEach(k => { if (!(k in db.settings)) db.settings[k] = DEFAULT_SETTINGS[k]; });
     let changed = false;
     db.zlecenia.forEach(z => { if (!z.token) { z.token = generateToken(); changed = true; } });
     if (changed) saveDB();
   } else {
     db = {
-      zlecenia: [], czesci: [], mechanicy: [], zdjecia: [],
+      zlecenia: [], czesci: [], mechanicy: [], zdjecia: [], zamowienia_czesci: [],
       settings: { ...DEFAULT_SETTINGS },
-      nextId: { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1 },
+      nextId: { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1, zamowienia_czesci: 1 },
     };
     saveDB();
   }
@@ -177,6 +180,55 @@ body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSys
 // ── API ───────────────────────────────────────────────────────────────────────
 
 async function handleApi(pathname, method, query, body, res, req) {
+
+  // ── zamówienia części (Sklep) ────────────────────────────────────────
+  if (pathname === '/api/zamowienia-czesci' && method === 'GET') {
+    const status = query.status;
+    let wynik = [...(db.zamowienia_czesci || [])];
+    if (status && status !== 'wszystkie') wynik = wynik.filter(z => z.status === status);
+    return sendJson(res, wynik.sort((a, b) => b.id - a.id));
+  }
+  if (pathname === '/api/zamowienia-czesci' && method === 'POST') {
+    if (!body.nazwa_czesci || !body.zlecenie_id) return sendJson(res, { error: 'Brak danych' }, 400);
+    const z = db.zlecenia.find(z => z.id === parseInt(body.zlecenie_id));
+    const mech = db.mechanicy.find(m => m.id === parseInt(body.mechanik_id));
+    const id = db.nextId.zamowienia_czesci++;
+    const zam = {
+      id,
+      zlecenie_id: parseInt(body.zlecenie_id),
+      numer_zlecenia: z ? z.numer : '—',
+      klient_nazwa: z ? z.klient_nazwa : '',
+      marka: z ? (z.marka || '') : '',
+      model: z ? (z.model || '') : '',
+      nazwa_czesci: body.nazwa_czesci,
+      ilosc: parseInt(body.ilosc) || 1,
+      uwagi: body.uwagi || '',
+      mechanik_id: parseInt(body.mechanik_id) || null,
+      mechanik_nazwa: mech ? mech.nazwa : (body.mechanik_nazwa || ''),
+      status: 'oczekuje',
+      created_at: new Date().toISOString(),
+    };
+    if (!db.zamowienia_czesci) db.zamowienia_czesci = [];
+    db.zamowienia_czesci.push(zam);
+    saveDB();
+    return sendJson(res, { id }, 201);
+  }
+  const zamM = pathname.match(/^\/api\/zamowienia-czesci\/(\d+)$/);
+  if (zamM) {
+    const id = parseInt(zamM[1]);
+    if (method === 'PUT') {
+      const idx = (db.zamowienia_czesci || []).findIndex(z => z.id === id);
+      if (idx === -1) return sendJson(res, { error: 'Nie znaleziono' }, 404);
+      if (body.status) db.zamowienia_czesci[idx].status = body.status;
+      saveDB();
+      return sendJson(res, { success: true });
+    }
+    if (method === 'DELETE') {
+      db.zamowienia_czesci = (db.zamowienia_czesci || []).filter(z => z.id !== id);
+      saveDB();
+      return sendJson(res, { success: true });
+    }
+  }
 
   // ── API v1 (zewnętrzne API z auth) ─────────────────────────────────────
   if (pathname.startsWith('/api/v1/')) {
@@ -319,7 +371,7 @@ async function handleApi(pathname, method, query, body, res, req) {
     }
     if (method === 'PUT') {
       const allowed = ['smtp_host','smtp_port','smtp_user','smtp_pass','public_url',
-        'allegro_client_id','allegro_client_secret','shoper_url','shoper_api_key'];
+        'allegro_client_id','allegro_client_secret','shoper_url','shoper_api_key','shop_email_to'];
       allowed.forEach(k => { if (k in body) db.settings[k] = body[k]; });
       saveDB();
       return sendJson(res, { success: true });
