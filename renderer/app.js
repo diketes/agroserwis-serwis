@@ -382,6 +382,19 @@ async function renderSzczegoly(id) {
       </div>
 
       <div class="section-card no-print">
+        <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+          <span>📦 Zamów brakującą część</span>
+          <span style="font-size:.75rem;color:var(--slate-400);font-weight:400">Trafi do zakładki Sklep → wyślesz email do dostawcy</span>
+        </div>
+        <div class="add-czesc-form" style="align-items:flex-end">
+          <input class="form-control" id="zam-n" placeholder="Nazwa części" style="flex:3">
+          <input class="form-control" id="zam-i" type="number" value="1" min="1" style="width:70px" placeholder="Ilość">
+          <input class="form-control" id="zam-u" placeholder="Uwagi (opcjonalnie)" style="flex:2">
+          <button class="btn btn-sm" style="background:#ea580c;color:white;border:none;white-space:nowrap" onclick="zamowCzescDesktop(${id})">📦 Zamów</button>
+        </div>
+      </div>
+
+      <div class="section-card no-print">
         <div class="section-label">Zdjęcia dokumentacyjne</div>
         <div class="photos-cols">
           <div>
@@ -1122,6 +1135,20 @@ async function renderSklep() {
       </div>`}
     </div>
   `;
+}
+
+async function zamowCzescDesktop(zlecenieId) {
+  const nazwa = (document.getElementById('zam-n')?.value || '').trim();
+  if (!nazwa) { document.getElementById('zam-n')?.focus(); toast('Wpisz nazwę części', 'error'); return; }
+  const ilosc = parseInt(document.getElementById('zam-i')?.value) || 1;
+  const uwagi = (document.getElementById('zam-u')?.value || '').trim();
+  const mechId = activeMechanik?.id || null;
+  await window.api.sklep.zamow({ zlecenie_id: zlecenieId, nazwa_czesci: nazwa, ilosc, uwagi, mechanik_id: mechId });
+  document.getElementById('zam-n').value = '';
+  document.getElementById('zam-i').value = '1';
+  document.getElementById('zam-u').value = '';
+  toast(`"${nazwa}" dodano do zamówień — przejdź do Sklep żeby wysłać`);
+  refreshSklepBadge();
 }
 
 async function sklepStatus(id, status) {
