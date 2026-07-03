@@ -22,6 +22,13 @@ const STATUS_ORDER = ['Przyjęto', 'W naprawie', 'Czeka na części', 'Gotowe', 
 const KOLORY = ['#16a34a', '#2563eb', '#9333ea', '#ea580c', '#dc2626', '#0891b2'];
 
 // ── Helpers ────────────────────────────────────────────────────────────
+// Escapowanie HTML — dane wpisane przez użytkownika / z Allegro / z API
+// nie mogą wstrzykiwać znaczników do widoków
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 function initials(name) {
   return (name || '').split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
@@ -122,8 +129,8 @@ async function renderPickerGrid() {
   const cards = mechanicyCache.map(m => {
     const active = allZ.filter(z => z.mechanik_id === m.id && z.status !== 'Wydano').length;
     return `<div class="picker-card" onclick="selectMechanik(${m.id})">
-      <div class="picker-avatar" style="background:${m.kolor}">${initials(m.nazwa)}</div>
-      <div class="picker-name">${m.nazwa}</div>
+      <div class="picker-avatar" style="background:${m.kolor}">${esc(initials(m.nazwa))}</div>
+      <div class="picker-name">${esc(m.nazwa)}</div>
       <div class="picker-count">${active > 0 ? `${active} aktywnych` : 'brak zleceń'}</div>
     </div>`;
   }).join('');
@@ -192,9 +199,9 @@ function renderLista() {
 }
 
 async function loadStats() {
-  const stats = await window.api.statystyki.pobierz();
+  const stats = await window.api.statystyki.pobierz().catch(() => null);
   const el = document.getElementById('statsRow');
-  if (!el) return;
+  if (!el || !stats) return;
   const items = [
     { label: 'Wszystkich',  val: stats.total,                       color: '#475569' },
     { label: 'Przyjęto',    val: stats.statusy['Przyjęto']    || 0, color: '#1d4ed8' },
@@ -223,9 +230,13 @@ async function loadOrders() {
   const lista = await window.api.zlecenia.lista({
     status: filterStatus, szukaj: search,
     mechanik_id: activeMechanik !== null ? activeMechanik : 'wszyscy',
-  });
+  }).catch(() => null);
   const el = document.getElementById('ordersList');
   if (!el) return;
+  if (!lista) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>Błąd wczytywania zleceń — spróbuj ponownie</div></div>`;
+    return;
+  }
   if (!lista.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div>Brak zleceń</div></div>`;
     return;
@@ -233,11 +244,11 @@ async function loadOrders() {
   el.innerHTML = lista.map(z => {
     const m = getMechanik(z.mechanik_id);
     return `<div class="order-row" onclick="openZlecenie(${z.id})">
-      <div class="order-numer">${z.numer}</div>
-      <div class="order-client">${z.klient_nazwa}</div>
-      <div class="order-device">${[z.marka, z.model].filter(Boolean).join(' ') || '—'}</div>
+      <div class="order-numer">${esc(z.numer)}</div>
+      <div class="order-client">${esc(z.klient_nazwa)}</div>
+      <div class="order-device">${esc([z.marka, z.model].filter(Boolean).join(' ') || '—')}</div>
       <div>${badge(z.status)}</div>
-      <div>${m ? `<span class="mech-badge" style="background:${m.kolor}" title="${m.nazwa}">${initials(m.nazwa)}</span>` : ''}</div>
+      <div>${m ? `<span class="mech-badge" style="background:${m.kolor}" title="${esc(m.nazwa)}">${esc(initials(m.nazwa))}</span>` : ''}</div>
       <div class="order-date">${fmtDate(z.data_przyjecia)}</div>
       <svg class="order-arrow" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
@@ -253,14 +264,14 @@ async function renderSzczegoly(id) {
   document.getElementById('content').innerHTML =
     `<div style="padding:60px;text-align:center;color:var(--slate-400)">Ładowanie...</div>`;
 
-  const data = await window.api.zlecenia.pobierz(id);
+  const data = await window.api.zlecenia.pobierz(id).catch(() => null);
   if (!data) { navigate('lista'); return; }
 
   const czesci = data.czesci || [];
   const k = calcKoszty(data);
   const mechanik = getMechanik(data.mechanik_id);
   const mechanikOptions = '<option value="">— Nieprzydzielony —</option>' +
-    mechanicyCache.map(m => `<option value="${m.id}" ${data.mechanik_id === m.id ? 'selected' : ''}>${m.nazwa}</option>`).join('');
+    mechanicyCache.map(m => `<option value="${m.id}" ${data.mechanik_id === m.id ? 'selected' : ''}>${esc(m.nazwa)}</option>`).join('');
 
   const flowBtns = STATUS_ORDER.map(s => {
     const c = STATUS_CFG[s];
@@ -270,7 +281,7 @@ async function renderSzczegoly(id) {
 
   const czRows = czesci.length
     ? czesci.map(c => `<tr class="czesc-row" id="czesc-${c.id}" data-total="${c.ilosc * c.cena_jednostkowa}">
-        <td>${c.nazwa}</td>
+        <td>${esc(c.nazwa)}</td>
         <td class="text-center">${c.ilosc}</td>
         <td class="text-right">${fmt(c.cena_jednostkowa)}</td>
         <td class="text-right">${fmt(c.ilosc * c.cena_jednostkowa)}</td>
@@ -283,11 +294,11 @@ async function renderSzczegoly(id) {
 
       <div class="detail-topbar no-print">
         <button class="btn btn-outline btn-sm" onclick="goBack()">← Powrót</button>
-        <span class="detail-numer">${data.numer}</span>
+        <span class="detail-numer">${esc(data.numer)}</span>
         ${badge(data.status)}
-        ${mechanik ? `<span class="mech-badge" style="background:${mechanik.kolor};width:auto;border-radius:100px;padding:0 10px;font-size:.75rem" title="${mechanik.nazwa}">${mechanik.nazwa}</span>` : ''}
+        ${mechanik ? `<span class="mech-badge" style="background:${mechanik.kolor};width:auto;border-radius:100px;padding:0 10px;font-size:.75rem" title="${esc(mechanik.nazwa)}">${esc(mechanik.nazwa)}</span>` : ''}
         <div style="margin-left:auto;display:flex;gap:8px">
-          <button class="btn btn-outline btn-sm" id="emailBtn" onclick="wyślijEmailKlienta(${id},'${data.klient_email || ''}')">📧 E-mail</button>
+          <button class="btn btn-outline btn-sm" id="emailBtn" onclick="wyślijEmailKlienta(${id},this.dataset.email)" data-email="${esc(data.klient_email || '')}">📧 E-mail</button>
           <button class="btn btn-outline btn-sm" onclick="window.api.etykieta.drukuj(${id})">🏷 Etykieta</button>
           <button class="btn btn-outline btn-sm" onclick="printZlecenie('${data.numer}')">🖨 Drukuj PDF</button>
           <button class="btn btn-danger-outline btn-sm" onclick="askDelete(${id})">🗑 Usuń</button>
@@ -305,18 +316,18 @@ async function renderSzczegoly(id) {
           <div class="section-card">
             <div class="section-label">Dane klienta</div>
             <div class="form-row-2">
-              <div class="form-group"><label class="form-label">Imię i nazwisko</label><input class="form-control" id="f-kn" value="${data.klient_nazwa || ''}"></div>
-              <div class="form-group"><label class="form-label">Telefon</label><input class="form-control" id="f-kt" value="${data.klient_telefon || ''}"></div>
+              <div class="form-group"><label class="form-label">Imię i nazwisko</label><input class="form-control" id="f-kn" value="${esc(data.klient_nazwa || '')}"></div>
+              <div class="form-group"><label class="form-label">Telefon</label><input class="form-control" id="f-kt" value="${esc(data.klient_telefon || '')}"></div>
             </div>
-            <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="f-ke" value="${data.klient_email || ''}"></div>
+            <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="f-ke" value="${esc(data.klient_email || '')}"></div>
           </div>
 
           <div class="section-card">
             <div class="section-label">Sprzęt</div>
             <div class="form-row-3">
-              <div class="form-group"><label class="form-label">Marka</label><input class="form-control" id="f-ma" list="ml" value="${data.marka || ''}"></div>
-              <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="f-mo" value="${data.model || ''}"></div>
-              <div class="form-group"><label class="form-label">Nr seryjny</label><input class="form-control" id="f-sn" value="${data.nr_seryjny || ''}"></div>
+              <div class="form-group"><label class="form-label">Marka</label><input class="form-control" id="f-ma" list="ml" value="${esc(data.marka || '')}"></div>
+              <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="f-mo" value="${esc(data.model || '')}"></div>
+              <div class="form-group"><label class="form-label">Nr seryjny</label><input class="form-control" id="f-sn" value="${esc(data.nr_seryjny || '')}"></div>
             </div>
             <datalist id="ml"><option value="VENOM"><option value="Honda"><option value="Stihl"><option value="Husqvarna"><option value="Kärcher"><option value="Makita"><option value="TAIA"></datalist>
             <div class="form-group" style="margin-top:4px"><label class="form-label">Mechanik</label>
@@ -327,8 +338,8 @@ async function renderSzczegoly(id) {
 
           <div class="section-card">
             <div class="section-label">Usterka i notatki</div>
-            <div class="form-group"><label class="form-label">Opis usterki (klient)</label><textarea class="form-control" id="f-ust" rows="3">${data.opis_usterki || ''}</textarea></div>
-            <div class="form-group"><label class="form-label">Uwagi mechanika</label><textarea class="form-control" id="f-uw" rows="3">${data.uwagi || ''}</textarea></div>
+            <div class="form-group"><label class="form-label">Opis usterki (klient)</label><textarea class="form-control" id="f-ust" rows="3">${esc(data.opis_usterki || '')}</textarea></div>
+            <div class="form-group"><label class="form-label">Uwagi mechanika</label><textarea class="form-control" id="f-uw" rows="3">${esc(data.uwagi || '')}</textarea></div>
             <button class="btn btn-outline btn-sm" onclick="saveNotes(${id})">✓ Zapisz notatki</button>
           </div>
 
@@ -445,7 +456,7 @@ function trashBtn(onclick) {
 // ── Print template ─────────────────────────────────────────────────────
 function buildPrint(data, czesci, k, mechanik) {
   const rows = czesci.map(c => `<tr>
-    <td style="padding:5px 8px">${c.nazwa}</td>
+    <td style="padding:5px 8px">${esc(c.nazwa)}</td>
     <td style="padding:5px 8px;text-align:center">${c.ilosc}</td>
     <td style="padding:5px 8px;text-align:right">${fmt(c.cena_jednostkowa)}</td>
     <td style="padding:5px 8px;text-align:right">${fmt(c.ilosc * c.cena_jednostkowa)}</td>
@@ -459,26 +470,26 @@ function buildPrint(data, czesci, k, mechanik) {
       </div>
       <div style="text-align:right">
         <div style="font-size:13px;font-weight:700">Zlecenie serwisowe</div>
-        <div style="font-family:monospace;font-size:1.3rem;font-weight:900;color:#16a34a;margin:3px 0">${data.numer}</div>
+        <div style="font-family:monospace;font-size:1.3rem;font-weight:900;color:#16a34a;margin:3px 0">${esc(data.numer)}</div>
         <div style="font-size:12px;color:#666">Data: ${fmtDate(data.data_przyjecia, false)}</div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px;font-size:13px">
       <div>
         <strong>Klient:</strong><br>
-        ${data.klient_nazwa}
-        ${data.klient_telefon ? '<br>Tel: ' + data.klient_telefon : ''}
-        ${data.klient_email  ? '<br>' + data.klient_email : ''}
+        ${esc(data.klient_nazwa)}
+        ${data.klient_telefon ? '<br>Tel: ' + esc(data.klient_telefon) : ''}
+        ${data.klient_email  ? '<br>' + esc(data.klient_email) : ''}
       </div>
       <div>
         <strong>Sprzęt:</strong><br>
-        ${[data.marka, data.model].filter(Boolean).join(' ') || '—'}
-        ${data.nr_seryjny ? '<br>S/N: ' + data.nr_seryjny : ''}
-        ${mechanik ? '<br><strong>Mechanik:</strong> ' + mechanik.nazwa : ''}
+        ${esc([data.marka, data.model].filter(Boolean).join(' ') || '—')}
+        ${data.nr_seryjny ? '<br>S/N: ' + esc(data.nr_seryjny) : ''}
+        ${mechanik ? '<br><strong>Mechanik:</strong> ' + esc(mechanik.nazwa) : ''}
       </div>
     </div>
-    <div style="margin-bottom:14px;font-size:13px"><strong>Usterka:</strong><br>${data.opis_usterki || '—'}</div>
-    ${data.uwagi ? `<div style="margin-bottom:14px;font-size:13px"><strong>Uwagi:</strong><br>${data.uwagi}</div>` : ''}
+    <div style="margin-bottom:14px;font-size:13px"><strong>Usterka:</strong><br>${esc(data.opis_usterki || '—')}</div>
+    ${data.uwagi ? `<div style="margin-bottom:14px;font-size:13px"><strong>Uwagi:</strong><br>${esc(data.uwagi)}</div>` : ''}
     ${czesci.length ? `
       <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px">
         <thead><tr style="background:#16a34a;color:white">
@@ -581,7 +592,7 @@ async function dodajCzesc(zlecenieId) {
   row.id = `czesc-${res.id}`;
   row.dataset.total = ilosc * cena;
   row.innerHTML = `
-    <td>${nazwa}</td>
+    <td>${esc(nazwa)}</td>
     <td class="text-center">${ilosc}</td>
     <td class="text-right">${fmt(cena)}</td>
     <td class="text-right">${fmt(ilosc * cena)}</td>
@@ -624,8 +635,8 @@ async function renderNowe() {
         <span class="numer-preview">${numer}</span>
       </div>
       ${m ? `<div class="mechanic-info-bar">
-        <div class="mech-avatar" style="background:${m.kolor}">${initials(m.nazwa)}</div>
-        <div>Zlecenie zostanie przypisane do: <strong>${m.nazwa}</strong></div>
+        <div class="mech-avatar" style="background:${m.kolor}">${esc(initials(m.nazwa))}</div>
+        <div>Zlecenie zostanie przypisane do: <strong>${esc(m.nazwa)}</strong></div>
       </div>` : ''}
 
       <div id="apiloSearchBox" class="section-card" style="border:2px dashed var(--slate-200);background:var(--slate-50)">
@@ -733,9 +744,9 @@ async function renderMechanicy() {
             const active = allZ.filter(z => z.mechanik_id === m.id && z.status !== 'Wydano').length;
             const total  = allZ.filter(z => z.mechanik_id === m.id).length;
             return `<div class="mechanic-card">
-              <div class="mech-avatar" style="background:${m.kolor}">${initials(m.nazwa)}</div>
+              <div class="mech-avatar" style="background:${m.kolor}">${esc(initials(m.nazwa))}</div>
               <div class="mech-info">
-                <div class="mech-name">${m.nazwa}</div>
+                <div class="mech-name">${esc(m.nazwa)}</div>
                 <div class="mech-stats">${active} aktywnych · ${total} łącznie</div>
               </div>
               ${trashBtn(`usunMechanika(${m.id})`).replace('btn-icon-sm', 'btn-icon-sm btn-danger-icon')}
@@ -927,7 +938,7 @@ async function openPhoneModal() {
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <div style="width:12px;height:12px;border-radius:50%;background:${m.kolor||'#16a34a'};flex-shrink:0"></div>
-          <div style="font-weight:800;font-size:1rem">${m.nazwa}</div>
+          <div style="font-weight:800;font-size:1rem">${esc(m.nazwa)}</div>
         </div>
         <div style="font-family:monospace;font-size:1.5rem;font-weight:900;color:#1e293b;letter-spacing:.1em">${String(m.id).padStart(2,'0')}</div>
         <div style="font-size:.7rem;color:#94a3b8;margin-top:3px">Skanuj QR lub wpisz kod w aplikacji</div>
@@ -1073,8 +1084,8 @@ async function renderSklep() {
   el.innerHTML = '<div class="loading">Ładowanie...</div>';
 
   const [wszystkie, settings] = await Promise.all([
-    window.api.sklep.lista({ status: 'wszystkie' }),
-    window.api.settings.pobierz(),
+    window.api.sklep.lista({ status: 'wszystkie' }).catch(() => []),
+    window.api.settings.pobierz().catch(() => ({})),
   ]);
 
   const oczekujace  = wszystkie.filter(z => z.status === 'oczekuje');
@@ -1095,11 +1106,11 @@ async function renderSklep() {
     const masz = [p.marka, p.model].filter(Boolean).join(' ') || '—';
     const statusCls = { oczekuje: 'background:#fef3c7;color:#92400e', zamowione: 'background:#dbeafe;color:#1e40af', dostarczone: 'background:#dcfce7;color:#15803d' }[p.status] || '';
     return `<tr style="border-bottom:1px solid #f1f5f9">
-      <td style="padding:10px 12px;font-weight:800;font-size:.95rem">${p.nazwa_czesci}</td>
+      <td style="padding:10px 12px;font-weight:800;font-size:.95rem">${esc(p.nazwa_czesci)}</td>
       <td style="padding:10px 12px;text-align:center;font-weight:700;font-size:1rem">${p.ilosc}</td>
-      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${p.numer_zlecenia}<br><span style="color:#94a3b8">${masz}</span></td>
-      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${p.mechanik_nazwa || '—'}<br><span style="color:#94a3b8">${d}</span></td>
-      <td style="padding:10px 12px;font-size:.78rem;color:#64748b">${p.uwagi || ''}</td>
+      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${esc(p.numer_zlecenia)}<br><span style="color:#94a3b8">${esc(masz)}</span></td>
+      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${esc(p.mechanik_nazwa || '—')}<br><span style="color:#94a3b8">${d}</span></td>
+      <td style="padding:10px 12px;font-size:.78rem;color:#64748b">${esc(p.uwagi || '')}</td>
       <td style="padding:10px 12px;white-space:nowrap">
         ${p.status === 'oczekuje'   ? `<button class="btn btn-outline btn-sm" onclick="sklepStatus(${p.id},'zamowione')">✓ Zamówione</button>` : ''}
         ${p.status === 'zamowione'  ? `<button class="btn btn-outline btn-sm" style="border-color:#16a34a;color:#16a34a" onclick="sklepStatus(${p.id},'dostarczone')">✓ Dostarczone</button>` : ''}
@@ -1196,17 +1207,18 @@ async function odswiezAllegro() {
     el.innerHTML = '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;text-align:center;color:#94a3b8;font-size:.85rem">Brak nowych zamówień Allegro do realizacji</div>';
     return;
   }
-  el.innerHTML = res.data.map(f => {
-    const items = f.items.map(i => `<span style="font-size:.8rem;color:#475569">${i.name} ×${i.qty}</span>`).join('<br>');
+  window._allegroForms = res.data;
+  el.innerHTML = res.data.map((f, idx) => {
+    const items = f.items.map(i => `<span style="font-size:.8rem;color:#475569">${esc(i.name)} ×${i.qty}</span>`).join('<br>');
     return `<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start">
       <div style="font-size:1.6rem;flex-shrink:0">🛒</div>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:800;font-size:.95rem;margin-bottom:2px">${f.buyer_name}</div>
-        <div style="font-size:.8rem;color:#64748b;margin-bottom:4px">${f.buyer_email}${f.buyer_phone ? ' · ' + f.buyer_phone : ''}</div>
+        <div style="font-weight:800;font-size:.95rem;margin-bottom:2px">${esc(f.buyer_name)}</div>
+        <div style="font-size:.8rem;color:#64748b;margin-bottom:4px">${esc(f.buyer_email)}${f.buyer_phone ? ' · ' + esc(f.buyer_phone) : ''}</div>
         <div style="margin-bottom:6px">${items}</div>
-        <div style="font-size:.78rem;color:#94a3b8">Wartość: ${f.total} ${f.currency} · #${f.id.slice(0,8)}...</div>
+        <div style="font-size:.78rem;color:#94a3b8">Wartość: ${esc(f.total)} ${esc(f.currency)} · #${esc(String(f.id).slice(0,8))}...</div>
       </div>
-      <button onclick="allegroDoWarsztatu(${JSON.stringify(f).replace(/"/g,'&quot;')})"
+      <button onclick="allegroDoWarsztatu(${idx})"
         class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
         🔧 Wyślij do warsztatu
       </button>
@@ -1214,10 +1226,16 @@ async function odswiezAllegro() {
   }).join('');
 }
 
-async function allegroDoWarsztatu(form) {
-  const res = await window.api.allegro.doWarsztatu(form);
+async function allegroDoWarsztatu(idx) {
+  const form = (window._allegroForms || [])[idx];
+  if (!form) return;
+  const res = await window.api.allegro.doWarsztatu(form).catch(() => ({}));
   if (res.numer) {
-    toast(`Zlecenie ${res.numer} utworzone dla ${form.buyer_name}`);
+    if (res.existing) {
+      toast(`To zamówienie ma już zlecenie ${res.numer}`, 'warning');
+    } else {
+      toast(`Zlecenie ${res.numer} utworzone dla ${form.buyer_name}`);
+    }
     navigate('lista');
   } else {
     toast('Błąd tworzenia zlecenia', 'error');
@@ -1229,7 +1247,8 @@ async function zamowCzescDesktop(zlecenieId) {
   if (!nazwa) { document.getElementById('zam-n')?.focus(); toast('Wpisz nazwę części', 'error'); return; }
   const ilosc = parseInt(document.getElementById('zam-i')?.value) || 1;
   const uwagi = (document.getElementById('zam-u')?.value || '').trim();
-  const mechId = activeMechanik?.id || null;
+  // activeMechanik to id (liczba), nie obiekt
+  const mechId = activeMechanik || null;
   await window.api.sklep.zamow({ zlecenie_id: zlecenieId, nazwa_czesci: nazwa, ilosc, uwagi, mechanik_id: mechId });
   document.getElementById('zam-n').value = '';
   document.getElementById('zam-i').value = '1';
@@ -1452,30 +1471,21 @@ async function polaczApilo() {
 }
 
 async function testEmail() {
-  await saveSettings();
+  // Zapisz ustawienia bez zamykania modala
+  await window.api.settings.zapisz({
+    smtp_user:  document.getElementById('set-smtp-user').value.trim(),
+    smtp_pass:  document.getElementById('set-smtp-pass').value.trim(),
+    smtp_host:  document.getElementById('set-smtp-host').value.trim() || 'smtp.gmail.com',
+    smtp_port:  parseInt(document.getElementById('set-smtp-port').value) || 587,
+  });
   const email = document.getElementById('set-smtp-user').value.trim();
   if (!email) { toast('Najpierw podaj adres e-mail SMTP', 'error'); return; }
-  const btn = document.querySelector('#settingsModal .btn-outline');
-  btn.textContent = '⏳ Wysyłanie...'; btn.disabled = true;
-  try {
-    const fakeZlecenie = {
-      numer: 'ZS-TEST-00001',
-      klient_email: email,
-      klient_nazwa: 'Test Testowy',
-      marka: 'Testowa Marka', model: 'Model X',
-      nr_seryjny: '', status: 'W naprawie',
-      data_przyjecia: new Date().toISOString(), token: 'test',
-    };
-    // Trigger a fake email — we'll send to self as a test
-    // Use a dedicated test endpoint via saving then calling email:wyslij
-    // Instead, call settings:test if exists, or just inform user to send from a real order
-    // For simplicity: save settings first, then show instructions
-    btn.textContent = '📧 Wyślij testowy'; btn.disabled = false;
-    toast('Ustawienia zapisane. Wyślij e-mail z konkretnego zlecenia aby przetestować.', 'success');
-  } catch (e) {
-    btn.textContent = '📧 Wyślij testowy'; btn.disabled = false;
-    toast('Błąd: ' + e.message, 'error');
-  }
+  const btn = document.querySelector('#settingsModal [onclick="testEmail()"]');
+  if (btn) { btn.textContent = '⏳ Wysyłanie...'; btn.disabled = true; }
+  const res = await window.api.email.test().catch(e => ({ ok: false, error: String(e.message || e) }));
+  if (btn) { btn.textContent = '📧 Wyślij testowy'; btn.disabled = false; }
+  if (res.ok) toast(`E-mail testowy wysłany na ${email} — sprawdź skrzynkę`);
+  else toast('Błąd SMTP: ' + res.error, 'error');
 }
 
 // ── Apilo search ───────────────────────────────────────────────────────
@@ -1513,13 +1523,13 @@ async function szukajApilo() {
     resultsDiv.style.display = 'block';
     resultsDiv.innerHTML = orders.map((o, i) => `
       <div class="apilo-result-card" onclick="wypelnijZApilo(${i})" data-idx="${i}">
-        <div class="apilo-result-name">${o.klient_nazwa || '—'}</div>
+        <div class="apilo-result-name">${esc(o.klient_nazwa || '—')}</div>
         <div class="apilo-result-meta">
-          ${o.klient_telefon ? `📞 ${o.klient_telefon}` : ''}
-          ${o.klient_email   ? `📧 ${o.klient_email}`   : ''}
-          ${o.model          ? `· ${o.model}`            : ''}
+          ${o.klient_telefon ? `📞 ${esc(o.klient_telefon)}` : ''}
+          ${o.klient_email   ? `📧 ${esc(o.klient_email)}`   : ''}
+          ${o.model          ? `· ${esc(o.model)}`            : ''}
         </div>
-        <div class="apilo-result-nr">Nr: ${o.apilo_order_nr || o.apilo_order_id}</div>
+        <div class="apilo-result-nr">Nr: ${esc(o.apilo_order_nr || o.apilo_order_id)}</div>
       </div>`).join('');
     // Store orders in a temp variable for access by wypelnijZApilo
     window._apiloOrders = orders;

@@ -59,10 +59,30 @@ const DEFAULT_SETTINGS = {
 
 function loadDB() {
   if (fs.existsSync(dbPath)) {
-    db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    try {
+      db = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    } catch (e) {
+      // Uszkodzony plik bazy — zrób kopię i zacznij od pustej zamiast crashować całą aplikację
+      const backup = dbPath + '.corrupt-' + Date.now();
+      try { fs.copyFileSync(dbPath, backup); } catch (_) {}
+      console.error(`Baza uszkodzona (${e.message}) — kopia zapisana: ${backup}`);
+      db = null;
+    }
+    if (!db || typeof db !== 'object') {
+      db = {
+        zlecenia: [], czesci: [], mechanicy: [], zdjecia: [], zamowienia_czesci: [],
+        settings: { ...DEFAULT_SETTINGS },
+        nextId: { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1, zamowienia_czesci: 1 },
+      };
+      saveDB();
+      return;
+    }
+    if (!db.zlecenia)  db.zlecenia  = [];
+    if (!db.czesci)    db.czesci    = [];
     if (!db.mechanicy) db.mechanicy = [];
     if (!db.zdjecia)   db.zdjecia   = [];
     if (!db.settings)  db.settings  = { ...DEFAULT_SETTINGS };
+    if (!db.nextId)    db.nextId    = { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1, zamowienia_czesci: 1 };
     if (!db.nextId.mechanicy)     db.nextId.mechanicy     = 1;
     if (!db.nextId.zdjecia)       db.nextId.zdjecia       = 1;
     if (!db.zamowienia_czesci)    db.zamowienia_czesci    = [];
@@ -86,6 +106,20 @@ function loadDB() {
 }
 
 // ── Email ─────────────────────────────────────────────────────────────
+
+// Jeden helper dla wszystkich maili — timeouty gwarantują, że wysyłka
+// nigdy nie zawiesi operacji (np. tworzenia zlecenia) na stałe.
+function createMailer() {
+  const s = db.settings;
+  const port = Number(s.smtp_port) || 587;
+  return nodemailer.createTransport({
+    host: s.smtp_host || 'smtp.gmail.com',
+    port,
+    secure: port === 465,
+    connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,
+    auth: { user: s.smtp_user, pass: s.smtp_pass },
+  });
+}
 
 function getTrackingUrl(token) {
   const s = db.settings;
@@ -162,13 +196,7 @@ async function sendTrackingEmail(zlecenie) {
 </body></html>`;
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: s.smtp_host || 'smtp.gmail.com',
-      port: Number(s.smtp_port) || 587,
-      secure: Number(s.smtp_port) === 465,
-      auth: { user: s.smtp_user, pass: s.smtp_pass },
-    });
-    await transporter.sendMail({
+    await createMailer().sendMail({
       from: `"Agroserwis Nysa" <${s.smtp_user}>`,
       to: zlecenie.klient_email,
       subject: `Zlecenie ${zlecenie.numer} — Agroserwis Nysa`,
@@ -181,7 +209,17 @@ async function sendTrackingEmail(zlecenie) {
 }
 
 function saveDB() {
-  fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8');
+  // Zapis atomowy (tmp + rename) — przerwany zapis nie uszkodzi bazy.
+  // Błąd zapisu nie wywraca operacji: dane zostają w pamięci, kolejny zapis ponowi próbę.
+  try {
+    const tmp = dbPath + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf8');
+    fs.renameSync(tmp, dbPath);
+    return true;
+  } catch (e) {
+    console.error('Błąd zapisu bazy:', e.message);
+    return false;
+  }
 }
 
 function generateNumer() {
@@ -391,6 +429,12 @@ async function handleApi(pathname, method, query, body, res, req) {
   }
 
   // ── Zarządzanie kluczami API ─────────────────────────────────────────
+  // Tylko z tego komputera (desktop) — telefony w sieci nie mogą czytać/tworzyć kluczy
+  if (pathname.startsWith('/api/api-keys')) {
+    const ra = (req && req.socket && req.socket.remoteAddress) || '';
+    const isLocal = ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1';
+    if (!isLocal) return sendJson(res, { error: 'Dostęp tylko lokalny' }, 403);
+  }
   if (pathname === '/api/api-keys') {
     if (method === 'GET') {
       return sendJson(res, (db.settings.api_keys || []).map(k => ({
@@ -466,9 +510,15 @@ async function handleApi(pathname, method, query, body, res, req) {
   // ── settings API ──
   if (pathname === '/api/settings') {
     if (method === 'GET') {
+      // Nigdy nie zwracaj sekretów przez HTTP — telefon potrzebuje tylko pól jawnych
       const s = { ...db.settings };
-      delete s.apilo_access_token; delete s.apilo_refresh_token; delete s.apilo_token_expires;
+      delete s.smtp_pass;
       delete s.api_keys;
+      delete s.apilo_access_token; delete s.apilo_refresh_token; delete s.apilo_token_expires;
+      delete s.apilo_client_secret;
+      delete s.allegro_access_token; delete s.allegro_refresh_token; delete s.allegro_token_expires;
+      delete s.allegro_client_secret;
+      delete s.shoper_api_key;
       return sendJson(res, s);
     }
     if (method === 'PUT') {
@@ -526,6 +576,9 @@ async function handleApi(pathname, method, query, body, res, req) {
     return sendJson(res, wynik.sort((a, b) => b.id - a.id));
   }
   if (pathname === '/api/zlecenia' && method === 'POST') {
+    if (!body.klient_nazwa || !body.opis_usterki) {
+      return sendJson(res, { error: 'Wymagane pola: klient_nazwa, opis_usterki' }, 400);
+    }
     const id = db.nextId.zlecenia++;
     const numer = generateNumer();
     db.zlecenia.push({
@@ -683,8 +736,7 @@ function startHttpServer() {
       const token = path.basename(pathname);
       const z = db.zlecenia.find(z => z.token === token);
       if (!z) { res.writeHead(404); res.end('Nie znaleziono'); return; }
-      const ip = getLocalIP();
-      const trackUrl = `http://${ip}:${HTTP_PORT}/sledz/${token}`;
+      const trackUrl = getTrackingUrl(token);
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(trackUrl)}`;
       const dateStr = new Date(z.data_przyjecia).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
       const sprzet = [z.marka, z.model].filter(Boolean).join(' ') || '—';
@@ -749,8 +801,17 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#1e293b;paddin
 
     if (pathname.startsWith('/api')) {
       let body = '';
-      req.on('data', chunk => { body += chunk; });
+      let tooBig = false;
+      req.on('data', chunk => {
+        body += chunk;
+        if (body.length > 20 * 1024 * 1024 && !tooBig) {
+          tooBig = true;
+          res.writeHead(413); res.end('Payload too large');
+          req.destroy();
+        }
+      });
       req.on('end', async () => {
+        if (tooBig) return;
         let data = {};
         try { if (body) data = JSON.parse(body); } catch (e) {}
         try { await handleApi(pathname, req.method, parsed.query, data, res, req); }
@@ -760,7 +821,13 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#1e293b;paddin
     }
 
     if (pathname === '/') pathname = '/index.html';
-    const filePath = path.join(webDir, pathname);
+    // Zabezpieczenie przed path traversal (/../) — serwuj tylko z katalogu web/
+    let decodedPath;
+    try { decodedPath = decodeURIComponent(pathname); } catch (e) { res.writeHead(400); res.end('Bad request'); return; }
+    const filePath = path.normalize(path.join(webDir, decodedPath));
+    if (filePath !== webDir && !filePath.startsWith(webDir + path.sep)) {
+      res.writeHead(403); res.end('Forbidden'); return;
+    }
     const ext = path.extname(filePath);
     fs.readFile(filePath, (err, content) => {
       if (err) { res.writeHead(404); res.end('Not found'); return; }
@@ -1067,8 +1134,8 @@ ipcMain.handle('sklep:lista', (_, params = {}) => {
 ipcMain.handle('sklep:zamow', (_, data) => {
   const z = db.zlecenia.find(z => z.id === parseInt(data.zlecenie_id));
   const mech = db.mechanicy.find(m => m.id === parseInt(data.mechanik_id));
-  const id = (db.nextId.zamowienia_czesci = (db.nextId.zamowienia_czesci || 1));
-  db.nextId.zamowienia_czesci++;
+  if (!db.nextId.zamowienia_czesci) db.nextId.zamowienia_czesci = 1;
+  const id = db.nextId.zamowienia_czesci++;
   const zam = {
     id,
     zlecenie_id: parseInt(data.zlecenie_id),
@@ -1144,16 +1211,8 @@ ipcMain.handle('sklep:wyslij-email', async () => {
   </div>
 </div></body></html>`;
 
-  const port = parseInt(s.smtp_port) || 587;
-  const transporter = nodemailer.createTransport({
-    host: s.smtp_host || 'smtp.gmail.com', port,
-    secure: port === 465,
-    connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 15000,
-    auth: { user: s.smtp_user, pass: s.smtp_pass },
-    tls: { rejectUnauthorized: false },
-  });
   try {
-    await transporter.sendMail({
+    await createMailer().sendMail({
       from: `"Agroserwis Nysa — Sklep" <${s.smtp_user}>`,
       to: s.shop_email_to,
       subject: `Zamówienie części ${dateStr} (${oczekujace.length} poz.)`,
@@ -1230,11 +1289,7 @@ body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSys
   </div>
 </div></body></html>`;
   try {
-    const transporter = nodemailer.createTransport({
-      host: s.smtp_host || 'smtp.gmail.com', port: Number(s.smtp_port) || 587,
-      secure: Number(s.smtp_port) === 465, auth: { user: s.smtp_user, pass: s.smtp_pass },
-    });
-    await transporter.sendMail({
+    await createMailer().sendMail({
       from: `"Agroserwis Nysa" <${s.smtp_user}>`,
       to: zlecenie.klient_email,
       subject: `✅ Sprzęt gotowy do odbioru — ${zlecenie.numer}`,
@@ -1243,12 +1298,28 @@ body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSys
   } catch (e) { console.error('Ready email error:', e.message); }
 }
 
+// Testowy e-mail z Ustawień — wysyła prostą wiadomość na własny adres SMTP
+ipcMain.handle('email:test', async () => {
+  const s = db.settings;
+  if (!s.smtp_user || !s.smtp_pass) return { ok: false, error: 'Uzupełnij e-mail i hasło SMTP' };
+  try {
+    await createMailer().sendMail({
+      from: `"Agroserwis Nysa" <${s.smtp_user}>`,
+      to: s.smtp_user,
+      subject: '✅ Test SMTP — Agroserwis Serwis',
+      html: `<p>Konfiguracja SMTP działa poprawnie.</p><p style="color:#94a3b8;font-size:12px">Wysłano ${new Date().toLocaleString('pl-PL')} z aplikacji Agroserwis Serwis.</p>`,
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
 // ── Etykieta na sprzęt ────────────────────────────────────────────────
 
 ipcMain.handle('etykieta:drukuj', (_, zlecenie_id) => {
   const z = db.zlecenia.find(z => z.id === zlecenie_id);
   if (!z) return { ok: false };
-  const ip       = getLocalIP();
   const trackUrl = getTrackingUrl(z.token);
   const qrUrl    = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(trackUrl)}`;
   const sprzet   = [z.marka, z.model].filter(Boolean).join(' ') || '—';
@@ -1358,6 +1429,7 @@ function allegroFetch(url, options = {}) {
       hostname: parsed.hostname,
       path: parsed.pathname + parsed.search,
       method: options.method || 'GET',
+      timeout: 20000,
       headers: {
         'Accept': ALLEGRO_ACCEPT,
         'Content-Type': 'application/json',
@@ -1372,6 +1444,7 @@ function allegroFetch(url, options = {}) {
         catch { resolve({ status: res.statusCode, body: data }); }
       });
     });
+    req.on('timeout', () => { req.destroy(new Error('Allegro nie odpowiada (timeout)')); });
     req.on('error', reject);
     if (options.body) req.write(typeof options.body === 'string' ? options.body : JSON.stringify(options.body));
     req.end();
@@ -1401,26 +1474,32 @@ async function allegroRefreshToken() {
 }
 
 async function allegroApiRequest(endpoint, options = {}) {
-  const s = db.settings;
-  if (!s.allegro_access_token) return { ok: false, error: 'Brak tokenu — połącz konto Allegro w Ustawieniach' };
-  if (Date.now() > (s.allegro_token_expires || 0)) {
-    const refreshed = await allegroRefreshToken();
-    if (!refreshed) return { ok: false, error: 'Token wygasł — zaloguj się ponownie w Ustawieniach' };
-  }
-  const res = await allegroFetch(`${ALLEGRO_API}${endpoint}`, {
-    ...options,
-    headers: { 'Authorization': `Bearer ${db.settings.allegro_access_token}`, ...(options.headers || {}) },
-  });
-  if (res.status === 401) {
-    const refreshed = await allegroRefreshToken();
-    if (!refreshed) return { ok: false, error: 'Sesja wygasła — zaloguj się ponownie' };
-    const retry = await allegroFetch(`${ALLEGRO_API}${endpoint}`, {
+  // Każdy błąd (sieć, timeout, token) wraca jako { ok:false } — awaria Allegro
+  // nigdy nie wywraca reszty aplikacji.
+  try {
+    const s = db.settings;
+    if (!s.allegro_access_token) return { ok: false, error: 'Brak tokenu — połącz konto Allegro w Ustawieniach' };
+    if (Date.now() > (s.allegro_token_expires || 0)) {
+      const refreshed = await allegroRefreshToken();
+      if (!refreshed) return { ok: false, error: 'Token wygasł — zaloguj się ponownie w Ustawieniach' };
+    }
+    const res = await allegroFetch(`${ALLEGRO_API}${endpoint}`, {
       ...options,
       headers: { 'Authorization': `Bearer ${db.settings.allegro_access_token}`, ...(options.headers || {}) },
     });
-    return { ok: retry.status < 300, body: retry.body, status: retry.status };
+    if (res.status === 401) {
+      const refreshed = await allegroRefreshToken();
+      if (!refreshed) return { ok: false, error: 'Sesja wygasła — zaloguj się ponownie' };
+      const retry = await allegroFetch(`${ALLEGRO_API}${endpoint}`, {
+        ...options,
+        headers: { 'Authorization': `Bearer ${db.settings.allegro_access_token}`, ...(options.headers || {}) },
+      });
+      return { ok: retry.status < 300, body: retry.body, status: retry.status };
+    }
+    return { ok: res.status < 300, body: res.body, status: res.status };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
   }
-  return { ok: res.status < 300, body: res.body, status: res.status };
 }
 
 let allegroDeviceCode = null;
@@ -1430,15 +1509,23 @@ ipcMain.handle('allegro:connect', async () => {
   const s = db.settings;
   if (!s.allegro_client_id) return { ok: false, error: 'Wpisz Client ID Allegro w Ustawieniach' };
 
-  const res = await allegroFetch(`${ALLEGRO_AUTH}/device`, {
-    method: 'POST',
-    headers: {
-      'Authorization': allegroBasicAuth(),
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json',
-    },
-    body: `client_id=${encodeURIComponent(s.allegro_client_id)}`,
-  });
+  // Przerwij poprzednie logowanie jeśli użytkownik kliknął drugi raz
+  if (allegroPolling) { clearInterval(allegroPolling); allegroPolling = null; }
+
+  let res;
+  try {
+    res = await allegroFetch(`${ALLEGRO_AUTH}/device`, {
+      method: 'POST',
+      headers: {
+        'Authorization': allegroBasicAuth(),
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
+      body: `client_id=${encodeURIComponent(s.allegro_client_id)}`,
+    });
+  } catch (e) {
+    return { ok: false, error: 'Brak połączenia z Allegro: ' + String(e.message || e) };
+  }
 
   if (res.status !== 200 || !res.body.device_code) {
     return { ok: false, error: `Błąd Allegro: ${JSON.stringify(res.body)}` };
@@ -1456,21 +1543,26 @@ ipcMain.handle('allegro:connect', async () => {
     allegroPolling = setInterval(async () => {
       tries++;
       if (tries > maxTries) {
-        clearInterval(allegroPolling);
+        clearInterval(allegroPolling); allegroPolling = null;
         resolveMain({ ok: false, error: 'Czas logowania minął — spróbuj ponownie' });
         return;
       }
-      const tokenRes = await allegroFetch(`${ALLEGRO_AUTH}/token`, {
-        method: 'POST',
-        headers: {
-          'Authorization': allegroBasicAuth(),
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-        },
-        body: `grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=${encodeURIComponent(allegroDeviceCode)}`,
-      });
+      let tokenRes;
+      try {
+        tokenRes = await allegroFetch(`${ALLEGRO_AUTH}/token`, {
+          method: 'POST',
+          headers: {
+            'Authorization': allegroBasicAuth(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
+          body: `grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=${encodeURIComponent(allegroDeviceCode)}`,
+        });
+      } catch (e) {
+        return; // chwilowy błąd sieci — próbuj dalej przy następnym ticku
+      }
       if (tokenRes.status === 200 && tokenRes.body.access_token) {
-        clearInterval(allegroPolling);
+        clearInterval(allegroPolling); allegroPolling = null;
         db.settings.allegro_access_token  = tokenRes.body.access_token;
         db.settings.allegro_refresh_token = tokenRes.body.refresh_token;
         db.settings.allegro_token_expires = Date.now() + (tokenRes.body.expires_in || 3600) * 1000 - 60000;
@@ -1512,6 +1604,9 @@ ipcMain.handle('allegro:zamowienia', async () => {
 });
 
 ipcMain.handle('allegro:do-warsztatu', (_, form) => {
+  // Nie twórz duplikatu jeśli to zamówienie Allegro już ma zlecenie
+  const existing = db.zlecenia.find(z => z.allegro_order_id && z.allegro_order_id === form.id);
+  if (existing) return { id: existing.id, numer: existing.numer, existing: true };
   const id = db.nextId.zlecenia++;
   const numer = generateNumer();
   const itemsDesc = (form.items || []).map(i => `${i.name} (${i.qty} szt.)`).join(', ');
@@ -1561,6 +1656,7 @@ function apiloFetch(endpoint, options = {}) {
       port:     parsed.port || (isHttps ? 443 : 80),
       path:     parsed.pathname + (parsed.search || ''),
       method:   options.method || 'GET',
+      timeout:  20000,
       headers:  { 'Content-Type': 'application/json', ...(options.headers || {}) },
     };
     const req = mod.request(reqOpts, res => {
@@ -1571,6 +1667,7 @@ function apiloFetch(endpoint, options = {}) {
         catch (e) { resolve({ status: res.statusCode, body: data }); }
       });
     });
+    req.on('timeout', () => { req.destroy(new Error('Apilo nie odpowiada (timeout)')); });
     req.on('error', reject);
     if (options.body) req.write(JSON.stringify(options.body));
     req.end();
@@ -1737,3 +1834,9 @@ ipcMain.handle('tunnel:stop', () => {
 });
 
 app.on('before-quit', () => stopTunnel());
+
+// ── Izolacja awarii ────────────────────────────────────────────────────
+// Nieobsłużony błąd w jednej funkcji (np. sieć Allegro/Apilo) nie może
+// zabić całej aplikacji ani serwera dla telefonów.
+process.on('uncaughtException', (e) => { console.error('Uncaught exception:', e); });
+process.on('unhandledRejection', (e) => { console.error('Unhandled rejection:', e); });

@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   email: {
     wyslij: (id) => ipcRenderer.invoke('email:wyslij', id),
+    test:   ()   => ipcRenderer.invoke('email:test'),
   },
   apilo: {
     polacz: (authCode) => ipcRenderer.invoke('apilo:polacz', authCode),

@@ -1,0 +1,44 @@
+AGROSERWIS WARSZTAT – MAPA PLIKÓW
+==================================
+
+ELECTRON DESKTOP APP
+---------------------
+main.js          – Serce aplikacji: serwer HTTP, baza danych (JSON),
+                   wszystkie handlery, logika Allegro/email/API
+preload.js       – Most między main a UI: eksponuje window.api.*
+launch.js        – Starter: sprawdza port, uruchamia Electron
+renderer/index.html – Cały HTML desktopowego interfejsu
+renderer/app.js  – Cała logika UI: widoki, zdarzenia, wywołania API
+renderer/style.css – Style desktopowego interfejsu
+
+CLOUD / RAILWAY
+---------------
+cloud/server.js  – Ten sam serwer co main.js ale standalone Node.js,
+                   działa na Railway, obsługuje telefony i REST API
+cloud/package.json – Zależności dla Railway (nodemailer itp.)
+Procfile         – Komenda startowa dla Railway
+nixpacks.toml    – Konfiguracja buildu Railway
+railway.json     – Konfiguracja Railway
+
+WEB / TELEFON
+-------------
+web/mobile.html  – Interfejs mechanika na telefonie: zlecenia,
+                   szczegóły, części, zamawianie części
+web/sledz.html   – Strona śledzenia zlecenia dla klienta (bez logowania)
+web/index.html   – Landing page / PWA shell
+web/app.js       – JS dla strony głównej
+web/style.css    – Style mobilne
+web/sw.js        – Service Worker (tryb offline, PWA)
+web/manifest.json – Manifest PWA: ikony, nazwa aplikacji
+
+ANDROID APP
+-----------
+android-app/.../MainActivity.java  – WebView ładujący mobile.html
+android-app/.../ScanActivity.java  – Skaner kodów QR
+
+CI/CD I BUILD
+-------------
+.github/workflows/build.yml      – GitHub Actions: build Windows (.exe)
+.github/workflows/build-mac.yml  – GitHub Actions: build macOS (.dmg)
+package.json     – Zależności Electron, skrypty npm (start, build)
+build/icon.ico   – Ikona aplikacji

@@ -30,7 +30,25 @@ let db;
 
 function loadDB() {
   if (fs.existsSync(DB_PATH)) {
-    db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    try {
+      db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    } catch (e) {
+      const backup = DB_PATH + '.corrupt-' + Date.now();
+      try { fs.copyFileSync(DB_PATH, backup); } catch (_) {}
+      console.error(`Baza uszkodzona (${e.message}) — kopia: ${backup}`);
+      db = null;
+    }
+    if (!db || typeof db !== 'object') {
+      db = {
+        zlecenia: [], czesci: [], mechanicy: [], zdjecia: [], zamowienia_czesci: [],
+        settings: { ...DEFAULT_SETTINGS },
+        nextId: { zlecenia: 1, czesci: 1, mechanicy: 1, zdjecia: 1, zamowienia_czesci: 1 },
+      };
+      saveDB();
+      return;
+    }
+    if (!db.zlecenia)   db.zlecenia   = [];
+    if (!db.czesci)     db.czesci     = [];
     if (!db.mechanicy)  db.mechanicy  = [];
     if (!db.zdjecia)    db.zdjecia    = [];
     if (!db.settings)   db.settings   = { ...DEFAULT_SETTINGS };
@@ -54,11 +72,19 @@ function loadDB() {
 }
 
 let saveTimer = null;
+function flushDB() {
+  // Zapis atomowy — przerwany zapis (np. restart kontenera) nie uszkodzi bazy
+  try {
+    const tmp = DB_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, DB_PATH);
+  } catch (e) {
+    console.error('Błąd zapisu bazy:', e.message);
+  }
+}
 function saveDB() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-  }, 300);
+  saveTimer = setTimeout(flushDB, 300);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,11 +105,17 @@ function generateNumer() {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
-  const count = db.zlecenia.filter(z => {
-    const zd = new Date(z.data_przyjecia);
-    return zd.getFullYear() === y && zd.getMonth() === d.getMonth();
-  }).length + 1;
-  return `SRW/${y}/${m}/${String(count).padStart(3, '0')}`;
+  // Bierz max istniejącego numeru zamiast liczby zleceń — po usunięciu
+  // zlecenia liczenie sztuk tworzyłoby zduplikowane numery
+  const prefix = `SRW/${y}/${m}/`;
+  let max = 0;
+  db.zlecenia.forEach(z => {
+    if (z.numer && z.numer.startsWith(prefix)) {
+      const n = parseInt(z.numer.slice(prefix.length), 10);
+      if (n > max) max = n;
+    }
+  });
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
 }
 
 function sendJson(res, data, status = 200) {
@@ -336,6 +368,16 @@ async function handleApi(pathname, method, query, body, res, req) {
   }
 
   // ── Zarządzanie kluczami API ─────────────────────────────────────────────
+  // Serwer jest publiczny — zarządzanie kluczami wymaga ADMIN_KEY (zmienna
+  // środowiskowa na Railway) w nagłówku X-Admin-Key, albo ważnego klucza API.
+  if (pathname.startsWith('/api/api-keys')) {
+    const adminKey = process.env.ADMIN_KEY || '';
+    const givenAdmin = req.headers['x-admin-key'] || '';
+    const isAdmin = adminKey && givenAdmin === adminKey;
+    if (!isAdmin && !validateApiKey(req)) {
+      return sendJson(res, { error: 'Brak dostępu — wymagany X-Admin-Key (zmienna ADMIN_KEY na serwerze) lub ważny klucz API' }, 403);
+    }
+  }
   if (pathname === '/api/api-keys') {
     if (method === 'GET') {
       const keys = (db.settings.api_keys || []).map(k => ({
@@ -367,6 +409,8 @@ async function handleApi(pathname, method, query, body, res, req) {
       const s = { ...db.settings };
       delete s.smtp_pass;
       delete s.api_keys;
+      delete s.allegro_client_secret;
+      delete s.shoper_api_key;
       return sendJson(res, s);
     }
     if (method === 'PUT') {
@@ -424,6 +468,9 @@ async function handleApi(pathname, method, query, body, res, req) {
     return sendJson(res, wynik.sort((a, b) => b.id - a.id));
   }
   if (pathname === '/api/zlecenia' && method === 'POST') {
+    if (!body.klient_nazwa || !body.opis_usterki) {
+      return sendJson(res, { error: 'Wymagane pola: klient_nazwa, opis_usterki' }, 400);
+    }
     const id = db.nextId.zlecenia++;
     const numer = generateNumer();
     const zlecenie = {
@@ -630,8 +677,17 @@ const server = http.createServer((req, res) => {
   // API
   if (pathname.startsWith('/api')) {
     let body = '';
-    req.on('data', chunk => { body += chunk; if (body.length > 20 * 1024 * 1024) { res.writeHead(413); res.end(); } });
+    let tooBig = false;
+    req.on('data', chunk => {
+      body += chunk;
+      if (body.length > 20 * 1024 * 1024 && !tooBig) {
+        tooBig = true;
+        res.writeHead(413); res.end('Payload too large');
+        req.destroy();
+      }
+    });
     req.on('end', async () => {
+      if (tooBig) return;
       let data = {};
       try { if (body) data = JSON.parse(body); } catch (e) {}
       try { await handleApi(pathname, req.method, parsed.query, data, res, req); }
@@ -642,7 +698,13 @@ const server = http.createServer((req, res) => {
 
   // Static web files
   let p = pathname === '/' ? '/index.html' : pathname;
-  const filePath = path.join(WEB_DIR, p);
+  // Zabezpieczenie przed path traversal (/../) — serwuj tylko z katalogu web/
+  let decoded;
+  try { decoded = decodeURIComponent(p); } catch (e) { res.writeHead(400); res.end('Bad request'); return; }
+  const filePath = path.normalize(path.join(WEB_DIR, decoded));
+  if (filePath !== WEB_DIR && !filePath.startsWith(WEB_DIR + path.sep)) {
+    res.writeHead(403); res.end('Forbidden'); return;
+  }
   fs.readFile(filePath, (err, content) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
@@ -655,5 +717,10 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`Agroserwis cloud server running on port ${PORT}`);
 });
 
-process.on('SIGTERM', () => { server.close(); process.exit(0); });
-process.on('SIGINT',  () => { server.close(); process.exit(0); });
+// Nieobsłużony błąd jednego requestu nie może zabić całego serwera
+process.on('uncaughtException', (e) => { console.error('Uncaught exception:', e); });
+process.on('unhandledRejection', (e) => { console.error('Unhandled rejection:', e); });
+
+// Przy zamknięciu (deploy na Railway) dopisz niezapisane zmiany zanim proces zginie
+process.on('SIGTERM', () => { clearTimeout(saveTimer); flushDB(); server.close(); process.exit(0); });
+process.on('SIGINT',  () => { clearTimeout(saveTimer); flushDB(); server.close(); process.exit(0); });
