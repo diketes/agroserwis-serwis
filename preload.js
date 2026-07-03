@@ -64,4 +64,9 @@ contextBridge.exposeInMainWorld('api', {
     stop:     ()  => ipcRenderer.invoke('tunnel:stop'),
     onProgress: (cb) => ipcRenderer.on('tunnel:download-progress', (_, pct) => cb(pct)),
   },
+  apiKeys: {
+    lista:   ()         => ipcRenderer.invoke('api-keys:lista'),
+    generuj: (data)     => ipcRenderer.invoke('api-keys:generuj', data),
+    usun:    (key)      => ipcRenderer.invoke('api-keys:usun', key),
+  },
 });

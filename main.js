@@ -14,7 +14,17 @@ let tunnelProcess = null;
 let tunnelUrl = null;
 
 function generateToken() {
-  return crypto.randomBytes(14).toString('hex'); // 28-char unguessable token
+  return crypto.randomBytes(14).toString('hex');
+}
+function generateApiKey() {
+  return 'agro_' + crypto.randomBytes(24).toString('hex');
+}
+function validateApiKey(req) {
+  const auth = req.headers['authorization'] || '';
+  const xkey = req.headers['x-api-key'] || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : xkey.trim();
+  if (!token) return false;
+  return (db.settings.api_keys || []).some(k => k.key === token);
 }
 
 let mainWindow;
@@ -36,6 +46,11 @@ const DEFAULT_SETTINGS = {
   apilo_access_token: '',
   apilo_refresh_token: '',
   apilo_token_expires: 0,
+  api_keys: [],
+  allegro_client_id: '',
+  allegro_client_secret: '',
+  shoper_url: '',
+  shoper_api_key: '',
 };
 
 function loadDB() {
@@ -272,17 +287,138 @@ function sendJson(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-async function handleApi(pathname, method, query, body, res) {
+function getPublicBase(req) {
+  const s = db.settings;
+  if (s.public_url) return s.public_url.replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${HTTP_PORT}`;
+  return `${proto}://${host}`;
+}
+
+async function handleApi(pathname, method, query, body, res, req) {
+
+  // ── API v1 (zewnętrzne REST API z auth) ─────────────────────────────
+  if (pathname.startsWith('/api/v1/')) {
+    if (pathname === '/api/v1/ping' && method === 'GET') {
+      return sendJson(res, { ok: true, name: 'Agroserwis Serwis API', version: '1' });
+    }
+    if (!validateApiKey(req)) {
+      return sendJson(res, { error: 'Unauthorized — wymagany klucz API' }, 401);
+    }
+    if (pathname === '/api/v1/zlecenia' && method === 'GET') {
+      let wynik = [...db.zlecenia];
+      if (query.status && query.status !== 'all') wynik = wynik.filter(z => z.status === query.status);
+      if (query.mechanik_id) wynik = wynik.filter(z => String(z.mechanik_id) === String(query.mechanik_id));
+      if (query.szukaj) {
+        const s = query.szukaj.toLowerCase();
+        wynik = wynik.filter(z =>
+          z.numer.toLowerCase().includes(s) ||
+          (z.klient_nazwa || '').toLowerCase().includes(s) ||
+          (z.marka || '').toLowerCase().includes(s)
+        );
+      }
+      const limit  = Math.min(parseInt(query.limit  || '100'), 500);
+      const offset = parseInt(query.offset || '0');
+      const total  = wynik.length;
+      const base   = req ? getPublicBase(req) : `http://localhost:${HTTP_PORT}`;
+      wynik = wynik.sort((a, b) => b.id - a.id).slice(offset, offset + limit).map(z => ({
+        id: z.id, numer: z.numer,
+        klient_nazwa: z.klient_nazwa, klient_telefon: z.klient_telefon, klient_email: z.klient_email,
+        marka: z.marka, model: z.model, nr_seryjny: z.nr_seryjny,
+        opis_usterki: z.opis_usterki, uwagi: z.uwagi,
+        status: z.status, data_przyjecia: z.data_przyjecia,
+        data_gotowosci: z.data_gotowosci, data_wydania: z.data_wydania,
+        koszt_robocizny: z.koszt_robocizny, mechanik_id: z.mechanik_id,
+        tracking_url: `${base}/sledz/${z.token}`,
+      }));
+      return sendJson(res, { total, offset, limit, data: wynik });
+    }
+    if (pathname === '/api/v1/zlecenia' && method === 'POST') {
+      if (!body.klient_nazwa || !body.opis_usterki) {
+        return sendJson(res, { error: 'Wymagane pola: klient_nazwa, opis_usterki' }, 422);
+      }
+      const id = db.nextId.zlecenia++;
+      const numer = generateNumer();
+      const zlecenie = {
+        id, numer,
+        klient_nazwa: body.klient_nazwa, klient_telefon: body.klient_telefon || '',
+        klient_email: body.klient_email || '', marka: body.marka || '',
+        model: body.model || '', nr_seryjny: body.nr_seryjny || '',
+        opis_usterki: body.opis_usterki, uwagi: body.uwagi || '',
+        status: 'Przyjęto', data_przyjecia: new Date().toISOString(),
+        data_gotowosci: null, data_wydania: null, koszt_robocizny: 0,
+        mechanik_id: body.mechanik_id ? parseInt(body.mechanik_id) : null,
+        zrodlo: body.zrodlo || 'api',
+        token: generateToken(),
+      };
+      db.zlecenia.push(zlecenie);
+      saveDB();
+      const base = req ? getPublicBase(req) : `http://localhost:${HTTP_PORT}`;
+      return sendJson(res, { id, numer, tracking_url: `${base}/sledz/${zlecenie.token}` }, 201);
+    }
+    const v1ZM = pathname.match(/^\/api\/v1\/zlecenia\/(\d+)$/);
+    if (v1ZM) {
+      const id = parseInt(v1ZM[1]);
+      if (method === 'GET') {
+        const z = db.zlecenia.find(z => z.id === id);
+        if (!z) return sendJson(res, { error: 'Nie znaleziono' }, 404);
+        const base = req ? getPublicBase(req) : `http://localhost:${HTTP_PORT}`;
+        return sendJson(res, {
+          ...z,
+          czesci: db.czesci.filter(c => c.zlecenie_id === id),
+          tracking_url: `${base}/sledz/${z.token}`,
+        });
+      }
+      if (method === 'PATCH' || method === 'PUT') {
+        const idx = db.zlecenia.findIndex(z => z.id === id);
+        if (idx === -1) return sendJson(res, { error: 'Nie znaleziono' }, 404);
+        const allowed = ['klient_nazwa','klient_telefon','klient_email','marka','model','nr_seryjny','opis_usterki','uwagi','status','koszt_robocizny','data_gotowosci','data_wydania','mechanik_id'];
+        allowed.forEach(k => { if (k in body) db.zlecenia[idx][k] = body[k]; });
+        saveDB();
+        return sendJson(res, { success: true });
+      }
+    }
+    if (pathname === '/api/v1/mechanicy' && method === 'GET') {
+      return sendJson(res, db.mechanicy);
+    }
+    return sendJson(res, { error: 'Nie znaleziono endpoint' }, 404);
+  }
+
+  // ── Zarządzanie kluczami API ─────────────────────────────────────────
+  if (pathname === '/api/api-keys') {
+    if (method === 'GET') {
+      return sendJson(res, (db.settings.api_keys || []).map(k => ({
+        label: k.label, created_at: k.created_at,
+        key_prefix: k.key.slice(0, 12) + '...', key: k.key,
+      })));
+    }
+    if (method === 'POST') {
+      const key = generateApiKey();
+      const entry = { key, label: body.label || 'Klucz API', created_at: new Date().toISOString() };
+      if (!db.settings.api_keys) db.settings.api_keys = [];
+      db.settings.api_keys.push(entry);
+      saveDB();
+      return sendJson(res, entry, 201);
+    }
+  }
+  if (pathname.startsWith('/api/api-keys/') && method === 'DELETE') {
+    const keyToDelete = decodeURIComponent(pathname.slice('/api/api-keys/'.length));
+    db.settings.api_keys = (db.settings.api_keys || []).filter(k => k.key !== keyToDelete);
+    saveDB();
+    return sendJson(res, { success: true });
+  }
 
   // ── settings API ──
   if (pathname === '/api/settings') {
     if (method === 'GET') {
       const s = { ...db.settings };
       delete s.apilo_access_token; delete s.apilo_refresh_token; delete s.apilo_token_expires;
+      delete s.api_keys;
       return sendJson(res, s);
     }
     if (method === 'PUT') {
-      const allowed = ['smtp_host','smtp_port','smtp_user','smtp_pass','public_url','apilo_url','apilo_client_id','apilo_client_secret'];
+      const allowed = ['smtp_host','smtp_port','smtp_user','smtp_pass','public_url','apilo_url','apilo_client_id','apilo_client_secret',
+        'allegro_client_id','allegro_client_secret','shoper_url','shoper_api_key'];
       allowed.forEach(k => { if (k in body) db.settings[k] = body[k]; });
       saveDB();
       return sendJson(res, { success: true });
@@ -461,7 +597,7 @@ function startHttpServer() {
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -562,7 +698,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#1e293b;paddin
       req.on('end', async () => {
         let data = {};
         try { if (body) data = JSON.parse(body); } catch (e) {}
-        try { await handleApi(pathname, req.method, parsed.query, data, res); }
+        try { await handleApi(pathname, req.method, parsed.query, data, res, req); }
         catch (e) { sendJson(res, { error: String(e.message) }, 500); }
       });
       return;
@@ -830,8 +966,34 @@ ipcMain.handle('photos:usun', (_, id) => {
 ipcMain.handle('settings:pobierz', () => ({ ...db.settings }));
 
 ipcMain.handle('settings:zapisz', (_, data) => {
-  const allowed = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'public_url'];
+  const allowed = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'public_url',
+    'apilo_url', 'apilo_client_id', 'apilo_client_secret',
+    'allegro_client_id', 'allegro_client_secret', 'shoper_url', 'shoper_api_key'];
   allowed.forEach(k => { if (k in data) db.settings[k] = data[k]; });
+  saveDB();
+  return { success: true };
+});
+
+// ── API Keys IPC ───────────────────────────────────────────────────────
+
+ipcMain.handle('api-keys:lista', () => {
+  return (db.settings.api_keys || []).map(k => ({
+    label: k.label, created_at: k.created_at,
+    key_prefix: k.key.slice(0, 14) + '...', key: k.key,
+  }));
+});
+
+ipcMain.handle('api-keys:generuj', (_, { label }) => {
+  const key = generateApiKey();
+  const entry = { key, label: label || 'Klucz API', created_at: new Date().toISOString() };
+  if (!db.settings.api_keys) db.settings.api_keys = [];
+  db.settings.api_keys.push(entry);
+  saveDB();
+  return entry;
+});
+
+ipcMain.handle('api-keys:usun', (_, key) => {
+  db.settings.api_keys = (db.settings.api_keys || []).filter(k => k.key !== key);
   saveDB();
   return { success: true };
 });

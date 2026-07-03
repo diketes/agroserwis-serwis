@@ -238,11 +238,73 @@
         </div>
       </div>
 
+      <div class="settings-section">
+        <div class="settings-section-title">🔑 Klucze API (własne API)</div>
+        <div class="settings-hint">
+          Zewnętrzne systemy mogą tworzyć i pobierać zlecenia przez REST API.
+          Endpoint: <code id="apiV1Endpoint">…/api/v1/</code>
+          <a id="apiDocsLink" href="#" onclick="openApiDocs();return false" style="margin-left:6px;color:var(--green-600);text-decoration:none;font-weight:600">📄 Dokumentacja</a>
+        </div>
+        <div id="api-keys-list" style="margin-bottom:10px;min-height:32px"></div>
+        <div class="settings-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:1;margin-bottom:0">
+            <label class="form-label">Nazwa klucza (np. "Allegro", "Shoper")</label>
+            <input class="form-control" id="new-api-key-label" placeholder="Moja integracja">
+          </div>
+          <button class="btn btn-outline btn-sm" style="margin-bottom:0;white-space:nowrap" onclick="generateNewApiKey()">+ Generuj klucz</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🛒 Allegro (integracja)</div>
+        <div class="settings-hint">
+          Client ID i Client Secret z panelu <strong>apps.developer.allegro.pl</strong>.
+          Po skonfigurowaniu będziesz mógł importować zamówienia Allegro jako zlecenia serwisowe.
+        </div>
+        <div class="settings-row">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Client ID</label>
+            <input class="form-control" id="set-allegro-id" placeholder="Client ID Allegro">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Client Secret</label>
+            <input class="form-control" id="set-allegro-secret" type="password" placeholder="Client Secret">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🏪 Shoper (integracja)</div>
+        <div class="settings-hint">
+          URL sklepu i klucz API z panelu Shoper: <strong>Konfiguracja → API → Klucz dostępu</strong>.
+          Po skonfigurowaniu zamówienia ze sklepu trafią do systemu jako zlecenia serwisowe.
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL sklepu Shoper</label>
+          <input class="form-control" id="set-shoper-url" placeholder="https://twojsklep.shoper.pl">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Klucz API</label>
+          <input class="form-control" id="set-shoper-key" type="password" placeholder="Klucz API Shoper">
+        </div>
+      </div>
+
       <div style="display:flex;gap:10px;margin-top:6px">
         <button class="btn btn-secondary" style="flex:1" onclick="closeSettings()">Anuluj</button>
         <button class="btn btn-outline btn-sm" style="flex:1" onclick="testEmail()">📧 Wyślij testowy</button>
         <button class="btn btn-primary" style="flex:1" onclick="saveSettings()">✓ Zapisz</button>
       </div>
+    </div>
+  </div>
+
+  <!-- API DOCS MODAL -->
+  <div id="apiDocsModal" class="modal-overlay d-none" onclick="if(event.target===this)closeApiDocs()">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-header">
+        <div class="modal-title">📄 Dokumentacja API</div>
+        <button class="btn-close-modal" onclick="closeApiDocs()">×</button>
+      </div>
+      <div id="apiDocsContent" style="font-size:.82rem;overflow-y:auto;max-height:520px"></div>
     </div>
   </div>
 

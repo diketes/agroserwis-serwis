@@ -1043,6 +1043,10 @@ async function openSettings() {
   document.getElementById('set-apilo-url').value    = s.apilo_url    || '';
   document.getElementById('set-apilo-id').value     = s.apilo_client_id     || '';
   document.getElementById('set-apilo-secret').value = s.apilo_client_secret || '';
+  document.getElementById('set-allegro-id').value     = s.allegro_client_id     || '';
+  document.getElementById('set-allegro-secret').value = s.allegro_client_secret || '';
+  document.getElementById('set-shoper-url').value = s.shoper_url || '';
+  document.getElementById('set-shoper-key').value = s.shoper_api_key || '';
   // Show connection status
   const status = await window.api.apilo.status();
   const bar = document.getElementById('apiloStatusBar');
@@ -1053,7 +1057,111 @@ async function openSettings() {
   } else {
     bar.style.display = 'none';
   }
+  // API endpoint URL
+  const info = await window.api.server.info().catch(() => ({}));
+  const cloudUrl = (s.public_url || '').replace(/\/$/, '');
+  const baseUrl = cloudUrl || (info.url || '');
+  document.getElementById('apiV1Endpoint').textContent = baseUrl ? `${baseUrl}/api/v1/` : '/api/v1/';
+  // Load API keys
+  await renderApiKeysList();
   document.getElementById('settingsModal').classList.remove('d-none');
+}
+
+async function renderApiKeysList() {
+  const list = document.getElementById('api-keys-list');
+  if (!list) return;
+  const keys = await window.api.apiKeys.lista();
+  if (!keys.length) {
+    list.innerHTML = '<div style="color:#94a3b8;font-size:.82rem;padding:4px 0">Brak kluczy — wygeneruj pierwszy klucz poniżej.</div>';
+    return;
+  }
+  list.innerHTML = keys.map(k => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:.85rem">${k.label}</div>
+        <div style="font-family:monospace;font-size:.75rem;color:#475569;word-break:break-all">${k.key}</div>
+        <div style="font-size:.7rem;color:#94a3b8">${new Date(k.created_at).toLocaleDateString('pl-PL')}</div>
+      </div>
+      <button onclick="copyApiKey('${k.key}')" title="Kopiuj klucz" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.8rem">📋</button>
+      <button onclick="deleteApiKey('${k.key}')" title="Usuń klucz" style="background:none;border:1px solid #fecaca;border-radius:6px;padding:4px 8px;cursor:pointer;color:#ef4444;font-size:.8rem">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function generateNewApiKey() {
+  const label = (document.getElementById('new-api-key-label').value.trim()) || 'Klucz API';
+  await window.api.apiKeys.generuj({ label });
+  document.getElementById('new-api-key-label').value = '';
+  await renderApiKeysList();
+  toast('Klucz API wygenerowany');
+}
+
+function copyApiKey(key) {
+  navigator.clipboard.writeText(key).then(() => toast('Klucz skopiowany do schowka'));
+}
+
+async function deleteApiKey(key) {
+  await window.api.apiKeys.usun(key);
+  await renderApiKeysList();
+  toast('Klucz usunięty');
+}
+
+function openApiDocs() {
+  const endpoint = document.getElementById('apiV1Endpoint')?.textContent || '/api/v1/';
+  const base = endpoint.replace(/\/api\/v1\/$/, '');
+  const keys = document.querySelectorAll('#api-keys-list [style*="monospace"]');
+  const exampleKey = keys.length ? keys[0].textContent.trim() : 'agro_TWOJ_KLUCZ_API';
+  document.getElementById('apiDocsContent').innerHTML = `
+    <div style="padding:4px 0 12px">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:14px;font-size:.8rem">
+        <div style="font-weight:700;color:#1e293b;margin-bottom:6px">Base URL</div>
+        <code style="font-size:.85rem;color:#16a34a">${base}</code>
+      </div>
+      <div style="font-weight:700;font-size:.85rem;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Autoryzacja</div>
+      <div style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:.8rem;margin-bottom:16px;overflow-x:auto">
+Authorization: Bearer ${exampleKey}<br>
+<span style="color:#94a3b8"># lub:</span><br>
+X-API-Key: ${exampleKey}
+      </div>
+      <div style="font-weight:700;font-size:.85rem;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Endpointy</div>
+      ${[
+        ['GET',   '/api/v1/ping',              'Sprawdź połączenie (bez autoryzacji)'],
+        ['GET',   '/api/v1/mechanicy',          'Lista mechaników'],
+        ['GET',   '/api/v1/zlecenia',           'Lista zleceń (?status=&szukaj=&limit=&offset=)'],
+        ['POST',  '/api/v1/zlecenia',           'Utwórz zlecenie'],
+        ['GET',   '/api/v1/zlecenia/{id}',      'Pobierz zlecenie z częściami'],
+        ['PATCH', '/api/v1/zlecenia/{id}',      'Aktualizuj zlecenie (status, pola)'],
+      ].map(([m, p, d]) => `
+        <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9">
+          <span style="font-family:monospace;font-size:.75rem;font-weight:800;color:${m==='GET'?'#2563eb':m==='POST'?'#16a34a':m==='PATCH'?'#ea580c':'#dc2626'};min-width:44px">${m}</span>
+          <code style="font-size:.78rem;color:#1e293b;flex:1">${p}</code>
+          <span style="font-size:.75rem;color:#64748b">${d}</span>
+        </div>
+      `).join('')}
+      <div style="margin-top:16px;font-weight:700;font-size:.85rem;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Przykład — utwórz zlecenie</div>
+      <div style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:.75rem;overflow-x:auto;white-space:pre">curl -X POST ${base}/api/v1/zlecenia \\
+  -H "Authorization: Bearer ${exampleKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "klient_nazwa": "Jan Kowalski",
+    "klient_telefon": "600123456",
+    "klient_email": "jan@example.com",
+    "marka": "John Deere",
+    "model": "5090M",
+    "opis_usterki": "Nie odpala silnik",
+    "zrodlo": "allegro"
+  }'</div>
+      <div style="margin-top:10px;background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:.75rem;overflow-x:auto;white-space:pre">{
+  "id": 42,
+  "numer": "SRW/2026/07/001",
+  "tracking_url": "${base}/sledz/abc123..."
+}</div>
+    </div>
+  `;
+  document.getElementById('apiDocsModal').classList.remove('d-none');
+}
+function closeApiDocs() {
+  document.getElementById('apiDocsModal').classList.add('d-none');
 }
 
 function closeSettings() {
@@ -1070,6 +1178,10 @@ async function saveSettings() {
     apilo_url:           document.getElementById('set-apilo-url').value.trim().replace(/\/$/, ''),
     apilo_client_id:     document.getElementById('set-apilo-id').value.trim(),
     apilo_client_secret: document.getElementById('set-apilo-secret').value.trim(),
+    allegro_client_id:     document.getElementById('set-allegro-id').value.trim(),
+    allegro_client_secret: document.getElementById('set-allegro-secret').value.trim(),
+    shoper_url:    document.getElementById('set-shoper-url').value.trim().replace(/\/$/, ''),
+    shoper_api_key: document.getElementById('set-shoper-key').value.trim(),
   });
   closeSettings();
   toast('Ustawienia zapisane');
