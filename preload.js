@@ -76,4 +76,10 @@ contextBridge.exposeInMainWorld('api', {
     usun:         (id)   => ipcRenderer.invoke('sklep:usun', id),
     wyslijEmail:  ()     => ipcRenderer.invoke('sklep:wyslij-email'),
   },
+  allegro: {
+    connect:     ()      => ipcRenderer.invoke('allegro:connect'),
+    status:      ()      => ipcRenderer.invoke('allegro:status'),
+    zamowienia:  ()      => ipcRenderer.invoke('allegro:zamowienia'),
+    doWarsztatu: (form)  => ipcRenderer.invoke('allegro:do-warsztatu', form),
+  },
 });

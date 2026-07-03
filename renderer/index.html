@@ -277,7 +277,10 @@
         <div class="settings-section-title">🛒 Allegro (integracja)</div>
         <div class="settings-hint">
           Client ID i Client Secret z panelu <strong>apps.developer.allegro.pl</strong>.
-          Po skonfigurowaniu będziesz mógł importować zamówienia Allegro jako zlecenia serwisowe.
+          Po podaniu kluczy kliknij "Połącz z Allegro" — otworzy się przeglądarka do zalogowania.
+        </div>
+        <div id="allegroStatusBar" style="display:none;align-items:center;gap:8px;margin-bottom:10px;font-size:.82rem;padding:8px 12px;border-radius:8px;background:#dcfce7;color:#15803d">
+          <span>✅</span><span id="allegroStatusText">Połączono</span>
         </div>
         <div class="settings-row">
           <div class="form-group" style="flex:1">
@@ -289,6 +292,7 @@
             <input class="form-control" id="set-allegro-secret" type="password" placeholder="Client Secret">
           </div>
         </div>
+        <button class="btn btn-outline btn-sm" onclick="polaczAllegro()" id="allegroConnBtn">🔗 Połącz z Allegro</button>
       </div>
 
       <div class="settings-section">

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -49,6 +49,9 @@ const DEFAULT_SETTINGS = {
   api_keys: [],
   allegro_client_id: '',
   allegro_client_secret: '',
+  allegro_access_token: '',
+  allegro_refresh_token: '',
+  allegro_token_expires: 0,
   shoper_url: '',
   shoper_api_key: '',
   shop_email_to: '',
@@ -1334,6 +1337,203 @@ ipcMain.handle('raport:dane', (_, { rok, miesiac }) => {
       status: z.status, total: z.total, data: z.data_przyjecia,
     })),
   };
+});
+
+// ── Allegro integration ────────────────────────────────────────────────
+
+const ALLEGRO_AUTH  = 'https://allegro.pl/auth/oauth';
+const ALLEGRO_API   = 'https://api.allegro.pl';
+const ALLEGRO_ACCEPT = 'application/vnd.allegro.public.v1+json';
+
+function allegroBasicAuth() {
+  const id  = db.settings.allegro_client_id     || '';
+  const sec = db.settings.allegro_client_secret || '';
+  return 'Basic ' + Buffer.from(`${id}:${sec}`).toString('base64');
+}
+
+function allegroFetch(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const reqOpts = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: options.method || 'GET',
+      headers: {
+        'Accept': ALLEGRO_ACCEPT,
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    };
+    const req = https.request(reqOpts, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode, body: data }); }
+      });
+    });
+    req.on('error', reject);
+    if (options.body) req.write(typeof options.body === 'string' ? options.body : JSON.stringify(options.body));
+    req.end();
+  });
+}
+
+async function allegroRefreshToken() {
+  const s = db.settings;
+  if (!s.allegro_refresh_token) return false;
+  const res = await allegroFetch(`${ALLEGRO_AUTH}/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': allegroBasicAuth(),
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+    },
+    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(s.allegro_refresh_token)}`,
+  });
+  if (res.status === 200 && res.body.access_token) {
+    db.settings.allegro_access_token = res.body.access_token;
+    db.settings.allegro_refresh_token = res.body.refresh_token || s.allegro_refresh_token;
+    db.settings.allegro_token_expires = Date.now() + (res.body.expires_in || 3600) * 1000 - 60000;
+    saveDB();
+    return true;
+  }
+  return false;
+}
+
+async function allegroApiRequest(endpoint, options = {}) {
+  const s = db.settings;
+  if (!s.allegro_access_token) return { ok: false, error: 'Brak tokenu — połącz konto Allegro w Ustawieniach' };
+  if (Date.now() > (s.allegro_token_expires || 0)) {
+    const refreshed = await allegroRefreshToken();
+    if (!refreshed) return { ok: false, error: 'Token wygasł — zaloguj się ponownie w Ustawieniach' };
+  }
+  const res = await allegroFetch(`${ALLEGRO_API}${endpoint}`, {
+    ...options,
+    headers: { 'Authorization': `Bearer ${db.settings.allegro_access_token}`, ...(options.headers || {}) },
+  });
+  if (res.status === 401) {
+    const refreshed = await allegroRefreshToken();
+    if (!refreshed) return { ok: false, error: 'Sesja wygasła — zaloguj się ponownie' };
+    const retry = await allegroFetch(`${ALLEGRO_API}${endpoint}`, {
+      ...options,
+      headers: { 'Authorization': `Bearer ${db.settings.allegro_access_token}`, ...(options.headers || {}) },
+    });
+    return { ok: retry.status < 300, body: retry.body, status: retry.status };
+  }
+  return { ok: res.status < 300, body: res.body, status: res.status };
+}
+
+let allegroDeviceCode = null;
+let allegroPolling = null;
+
+ipcMain.handle('allegro:connect', async () => {
+  const s = db.settings;
+  if (!s.allegro_client_id) return { ok: false, error: 'Wpisz Client ID Allegro w Ustawieniach' };
+
+  const res = await allegroFetch(`${ALLEGRO_AUTH}/device`, {
+    method: 'POST',
+    headers: {
+      'Authorization': allegroBasicAuth(),
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+    },
+    body: `client_id=${encodeURIComponent(s.allegro_client_id)}`,
+  });
+
+  if (res.status !== 200 || !res.body.device_code) {
+    return { ok: false, error: `Błąd Allegro: ${JSON.stringify(res.body)}` };
+  }
+
+  allegroDeviceCode = res.body.device_code;
+  const verifyUrl = res.body.verification_uri_complete || res.body.verification_uri;
+  shell.openExternal(verifyUrl);
+
+  const interval = (res.body.interval || 5) * 1000;
+  let tries = 0;
+  const maxTries = Math.floor((res.body.expires_in || 600) / (res.body.interval || 5));
+
+  return new Promise(resolveMain => {
+    allegroPolling = setInterval(async () => {
+      tries++;
+      if (tries > maxTries) {
+        clearInterval(allegroPolling);
+        resolveMain({ ok: false, error: 'Czas logowania minął — spróbuj ponownie' });
+        return;
+      }
+      const tokenRes = await allegroFetch(`${ALLEGRO_AUTH}/token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': allegroBasicAuth(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
+        body: `grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=${encodeURIComponent(allegroDeviceCode)}`,
+      });
+      if (tokenRes.status === 200 && tokenRes.body.access_token) {
+        clearInterval(allegroPolling);
+        db.settings.allegro_access_token  = tokenRes.body.access_token;
+        db.settings.allegro_refresh_token = tokenRes.body.refresh_token;
+        db.settings.allegro_token_expires = Date.now() + (tokenRes.body.expires_in || 3600) * 1000 - 60000;
+        saveDB();
+        resolveMain({ ok: true });
+      }
+      // authorization_pending — keep polling
+    }, interval);
+  });
+});
+
+ipcMain.handle('allegro:status', () => {
+  const s = db.settings;
+  return {
+    connected: !!(s.allegro_access_token && s.allegro_client_id),
+    expires: s.allegro_token_expires ? new Date(s.allegro_token_expires).toLocaleString('pl-PL') : null,
+  };
+});
+
+ipcMain.handle('allegro:zamowienia', async () => {
+  const res = await allegroApiRequest('/order/checkout-forms?status=READY_FOR_PROCESSING&limit=20');
+  if (!res.ok) return { ok: false, error: res.error || `Błąd API: ${res.status}` };
+  const forms = (res.body.checkoutForms || []).map(f => ({
+    id: f.id,
+    buyer_name: `${f.buyer?.firstName || ''} ${f.buyer?.lastName || ''}`.trim() || f.buyer?.login || '—',
+    buyer_email: f.buyer?.email || '',
+    buyer_phone: f.buyer?.phoneNumbers?.[0]?.number || '',
+    items: (f.lineItems || []).map(li => ({
+      name: li.offer?.name || '—',
+      qty: li.quantity || 1,
+      price: `${li.price?.amount || '0'} ${li.price?.currency || 'PLN'}`,
+    })),
+    total: f.summary?.totalToPay?.amount || '—',
+    currency: f.summary?.totalToPay?.currency || 'PLN',
+    status: f.status,
+    updated_at: f.updatedAt,
+  }));
+  return { ok: true, data: forms };
+});
+
+ipcMain.handle('allegro:do-warsztatu', (_, form) => {
+  const id = db.nextId.zlecenia++;
+  const numer = generateNumer();
+  const itemsDesc = (form.items || []).map(i => `${i.name} (${i.qty} szt.)`).join(', ');
+  const zlecenie = {
+    id, numer,
+    klient_nazwa:   form.buyer_name,
+    klient_telefon: form.buyer_phone || '',
+    klient_email:   form.buyer_email || '',
+    marka: '', model: '', nr_seryjny: '',
+    opis_usterki: `Zamówienie Allegro #${form.id}\nProdukty: ${itemsDesc}\nWartość: ${form.total} ${form.currency}`,
+    uwagi: '',
+    status: 'Przyjęto',
+    data_przyjecia: new Date().toISOString(),
+    data_gotowosci: null, data_wydania: null, koszt_robocizny: 0,
+    mechanik_id: null,
+    zrodlo: 'allegro',
+    allegro_order_id: form.id,
+    token: generateToken(),
+  };
+  db.zlecenia.push(zlecenie);
+  saveDB();
+  return { id, numer };
 });
 
 // ── Apilo integration ──────────────────────────────────────────────────

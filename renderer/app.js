@@ -1049,6 +1049,25 @@ async function stopTunnel() {
 
 let sklepFilter = 'oczekuje';
 
+async function polaczAllegro() {
+  const btn = document.getElementById('allegroConnBtn');
+  // Save credentials first
+  await window.api.settings.zapisz({
+    allegro_client_id:     document.getElementById('set-allegro-id').value.trim(),
+    allegro_client_secret: document.getElementById('set-allegro-secret').value.trim(),
+  });
+  btn.disabled = true; btn.textContent = '⏳ Czekam na zalogowanie w przeglądarce...';
+  const res = await window.api.allegro.connect();
+  btn.disabled = false; btn.textContent = '🔗 Połącz z Allegro';
+  if (res.ok) {
+    toast('Allegro połączone pomyślnie!');
+    document.getElementById('allegroStatusBar').style.display = 'flex';
+    document.getElementById('allegroStatusText').textContent = 'Połączono z Allegro — zamówienia dostępne w zakładce Sklep';
+  } else {
+    toast('Błąd: ' + res.error, 'error');
+  }
+}
+
 async function renderSklep() {
   const el = document.getElementById('content');
   el.innerHTML = '<div class="loading">Ładowanie...</div>';
@@ -1089,6 +1108,9 @@ async function renderSklep() {
       </td>
     </tr>`;
   }
+
+  // Check Allegro status
+  const allegroSt = await window.api.allegro.status().catch(() => ({ connected: false }));
 
   el.innerHTML = `
     <div style="padding:20px 24px">
@@ -1133,8 +1155,73 @@ async function renderSklep() {
           <tbody>${filtered.map(rowHtml).join('')}</tbody>
         </table>
       </div>`}
+
+      <!-- SEKCJA ALLEGRO -->
+      <div style="margin-top:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:1rem;font-weight:900;color:#1e293b">🛒 Zamówienia Allegro</div>
+            <div style="font-size:.78rem;color:#64748b;margin-top:2px">Opłacone zamówienia gotowe do realizacji</div>
+          </div>
+          ${allegroSt.connected
+            ? `<button class="btn btn-outline btn-sm" onclick="odswiezAllegro()">↺ Odśwież</button>`
+            : `<button class="btn btn-outline btn-sm" onclick="openSettings()">🔗 Połącz Allegro w Ustawieniach</button>`
+          }
+        </div>
+        <div id="allegroOrders">
+          ${allegroSt.connected
+            ? '<div style="color:#94a3b8;font-size:.82rem;text-align:center;padding:20px">Ładowanie zamówień...</div>'
+            : `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;text-align:center;color:#94a3b8;font-size:.85rem">
+                Podłącz konto Allegro w Ustawieniach → 🛒 Allegro aby zobaczyć zamówienia tutaj
+               </div>`
+          }
+        </div>
+      </div>
     </div>
   `;
+
+  if (allegroSt.connected) odswiezAllegro();
+}
+
+async function odswiezAllegro() {
+  const el = document.getElementById('allegroOrders');
+  if (!el) return;
+  el.innerHTML = '<div style="color:#94a3b8;font-size:.82rem;text-align:center;padding:20px">Ładowanie...</div>';
+  const res = await window.api.allegro.zamowienia();
+  if (!res.ok) {
+    el.innerHTML = `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;color:#dc2626;font-size:.85rem">Błąd: ${res.error}</div>`;
+    return;
+  }
+  if (!res.data.length) {
+    el.innerHTML = '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;text-align:center;color:#94a3b8;font-size:.85rem">Brak nowych zamówień Allegro do realizacji</div>';
+    return;
+  }
+  el.innerHTML = res.data.map(f => {
+    const items = f.items.map(i => `<span style="font-size:.8rem;color:#475569">${i.name} ×${i.qty}</span>`).join('<br>');
+    return `<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:1.6rem;flex-shrink:0">🛒</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:.95rem;margin-bottom:2px">${f.buyer_name}</div>
+        <div style="font-size:.8rem;color:#64748b;margin-bottom:4px">${f.buyer_email}${f.buyer_phone ? ' · ' + f.buyer_phone : ''}</div>
+        <div style="margin-bottom:6px">${items}</div>
+        <div style="font-size:.78rem;color:#94a3b8">Wartość: ${f.total} ${f.currency} · #${f.id.slice(0,8)}...</div>
+      </div>
+      <button onclick="allegroDoWarsztatu(${JSON.stringify(f).replace(/"/g,'&quot;')})"
+        class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
+        🔧 Wyślij do warsztatu
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function allegroDoWarsztatu(form) {
+  const res = await window.api.allegro.doWarsztatu(form);
+  if (res.numer) {
+    toast(`Zlecenie ${res.numer} utworzone dla ${form.buyer_name}`);
+    navigate('lista');
+  } else {
+    toast('Błąd tworzenia zlecenia', 'error');
+  }
 }
 
 async function zamowCzescDesktop(zlecenieId) {
@@ -1189,6 +1276,12 @@ async function openSettings() {
   document.getElementById('set-apilo-secret').value = s.apilo_client_secret || '';
   document.getElementById('set-allegro-id').value     = s.allegro_client_id     || '';
   document.getElementById('set-allegro-secret').value = s.allegro_client_secret || '';
+  // Allegro status
+  const allegroSt = await window.api.allegro.status().catch(() => ({ connected: false }));
+  const alBar = document.getElementById('allegroStatusBar');
+  const alTxt = document.getElementById('allegroStatusText');
+  if (alBar) alBar.style.display = allegroSt.connected ? 'flex' : 'none';
+  if (alTxt && allegroSt.connected) alTxt.textContent = `Połączono z Allegro${allegroSt.expires ? ' · token ważny do ' + allegroSt.expires : ''}`;
   document.getElementById('set-shoper-url').value = s.shoper_url || '';
   document.getElementById('set-shoper-key').value = s.shoper_api_key || '';
   document.getElementById('set-shop-email-to').value = s.shop_email_to || '';
