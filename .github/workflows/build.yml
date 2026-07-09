@@ -1,8 +1,8 @@
 name: Build
 
+# Tylko ręczne uruchamianie — automatyczne buildy na każdy push zapychały
+# limit miejsca na artefakty (gotowe pliki i tak trafiają do Releases)
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:

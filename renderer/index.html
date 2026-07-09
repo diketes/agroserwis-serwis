@@ -51,6 +51,12 @@
           Sklep
           <span id="sklepBadge" style="display:none;position:absolute;top:4px;right:4px;background:#ef4444;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:800;line-height:16px;text-align:center"></span>
         </button>
+        <button class="nav-tab" id="nav-gmail" onclick="navigate('gmail')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4Zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2Zm13 2.383-4.708 2.825L15 11.105V5.383Zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741ZM1 11.105l4.708-2.897L1 5.383v5.722Z"/>
+          </svg>
+          Gmail
+        </button>
       </nav>
 
       <div class="header-actions">
@@ -67,6 +73,9 @@
             <path d="M11 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6zM5 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H5z"/>
             <path d="M8 14a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
           </svg>
+        </button>
+        <button class="btn-icon-hdr" id="themeBtn" onclick="toggleTheme()" title="Przełącz motyw jasny/ciemny">
+          <span id="themeIcon" style="font-size:1rem;line-height:1">🌙</span>
         </button>
         <button class="btn-icon-hdr" onclick="openSettings()" title="Ustawienia e-mail">
           <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor">
@@ -85,6 +94,34 @@
     </header>
 
     <div id="content" class="content"></div>
+
+    <!-- GMAIL — wbudowana skrzynka (trwały ekran, webview przeżywa nawigację) -->
+    <div id="gmailScreen" class="gmail-screen d-none">
+      <div class="gmail-bar">
+        <div class="gmail-subtabs">
+          <button class="gmail-subtab active" id="gmSubSkrzynka" onclick="pokazGmailSub('skrzynka')">📥 Skrzynka</button>
+          <button class="gmail-subtab" id="gmSubNadawcze" onclick="pokazGmailSub('nadawcze')">📤 Konta nadawcze</button>
+        </div>
+        <div class="gmail-pills" id="gmailPills"></div>
+        <div class="gmail-bar-actions" id="gmailBarActions">
+          <button class="btn btn-outline btn-sm" onclick="odswiezGmailWeb()" title="Odśwież skrzynkę">↺</button>
+          <button class="btn btn-primary btn-sm" onclick="dodajGmailWeb()">＋ Dodaj konto</button>
+        </div>
+      </div>
+      <div class="gmail-web-wrap" id="gmailWebWrap">
+        <div class="gmail-empty" id="gmailEmpty">
+          <div style="font-size:3rem">📧</div>
+          <div style="font-weight:800;font-size:1.1rem;color:var(--slate-800)">Twój Gmail w aplikacji</div>
+          <div style="color:var(--slate-400);font-size:.88rem;max-width:400px;text-align:center;line-height:1.5">
+            Zaloguj się na swoje konto Google i korzystaj z normalnej skrzynki Gmail
+            bez wychodzenia z programu. Dodaj kilka kont i przełączaj się między nimi
+            jednym kliknięciem.
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="dodajGmailWeb()">＋ Dodaj konto Gmail</button>
+        </div>
+      </div>
+      <div class="gmail-smtp-wrap d-none" id="gmailSmtpWrap"></div>
+    </div>
   </div>
 
   <!-- TOAST -->
@@ -176,7 +213,8 @@
         <div class="settings-hint">
           Dla Gmail: włącz weryfikację dwuetapową, wejdź w
           <strong>Konto Google → Bezpieczeństwo → Hasła do aplikacji</strong>
-          i wygeneruj hasło dla "Poczta".
+          i wygeneruj hasło dla "Poczta".<br>
+          💡 Wieloma kontami Gmail zarządzasz w zakładce <strong>Konta</strong> — tam przełączysz konto jednym kliknięciem.
         </div>
         <div class="settings-row">
           <div class="form-group" style="flex:3">
@@ -206,6 +244,15 @@
         <div class="form-group">
           <label class="form-label">Adres Railway</label>
           <input class="form-control" id="set-public-url" placeholder="https://twoj-projekt.up.railway.app">
+        </div>
+        <div class="settings-hint">
+          <strong>Klucz synchronizacji:</strong> z nim aplikacja automatycznie wysyła zlecenia do Railway,
+          dzięki czemu link „Śledź naprawę" w e-mailach działa nawet przy wyłączonym komputerze.
+          Wklej klucz API z chmury (<code>agro_...</code>) albo wartość zmiennej <code>ADMIN_KEY</code> z panelu Railway.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Klucz synchronizacji chmury</label>
+          <input class="form-control" id="set-cloud-key" type="password" placeholder="agro_... lub ADMIN_KEY">
         </div>
       </div>
 

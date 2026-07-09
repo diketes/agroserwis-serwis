@@ -21,6 +21,24 @@ const STATUS_CFG = {
 const STATUS_ORDER = ['Przyjęto', 'W naprawie', 'Czeka na części', 'Gotowe', 'Wydano'];
 const KOLORY = ['#16a34a', '#2563eb', '#9333ea', '#ea580c', '#dc2626', '#0891b2'];
 
+// ── Motyw (jasny/ciemny) ───────────────────────────────────────────────
+// Ustaw od razu przy ładowaniu skryptu, żeby uniknąć mignięcia jasnego tła
+document.documentElement.dataset.theme = localStorage.getItem('agro-theme') || 'light';
+
+function applyTheme() {
+  const t = localStorage.getItem('agro-theme') || 'light';
+  document.documentElement.dataset.theme = t;
+  const ic = document.getElementById('themeIcon');
+  if (ic) ic.textContent = t === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('agro-theme', next);
+  applyTheme();
+  toast(next === 'dark' ? '🌙 Motyw ciemny' : '☀️ Motyw jasny');
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 // Escapowanie HTML — dane wpisane przez użytkownika / z Allegro / z API
 // nie mogą wstrzykiwać znaczników do widoków
@@ -144,7 +162,7 @@ async function renderPickerGrid() {
 function selectMechanik(id) {
   activeMechanik = id;
   const m = getMechanik(id);
-  document.getElementById('mechDot').style.background = m ? m.kolor : '#64748b';
+  document.getElementById('mechDot').style.background = m ? m.kolor : 'var(--slate-500)';
   document.getElementById('mechName').textContent = m ? m.nazwa : 'Wszyscy';
   showScreen('mainScreen');
   navigate('lista');
@@ -162,6 +180,19 @@ function navigate(view) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const tab = document.getElementById(`nav-${view}`);
   if (tab) tab.classList.add('active');
+
+  // Gmail to osobny, trwały ekran — webview z zalogowaną skrzynką musi
+  // przeżyć nawigację (nie może być niszczony razem z innerHTML #content)
+  const gmScreen = document.getElementById('gmailScreen');
+  const content  = document.getElementById('content');
+  if (view === 'gmail') {
+    content.classList.add('d-none');
+    gmScreen.classList.remove('d-none');
+    initGmailWeb();
+    return;
+  }
+  gmScreen.classList.add('d-none');
+  content.classList.remove('d-none');
 
   switch (view) {
     case 'lista':     renderLista(); break;
@@ -203,7 +234,7 @@ async function loadStats() {
   const el = document.getElementById('statsRow');
   if (!el || !stats) return;
   const items = [
-    { label: 'Wszystkich',  val: stats.total,                       color: '#475569' },
+    { label: 'Wszystkich',  val: stats.total,                       color: 'var(--slate-600)' },
     { label: 'Przyjęto',    val: stats.statusy['Przyjęto']    || 0, color: '#1d4ed8' },
     { label: 'W naprawie',  val: stats.statusy['W naprawie']  || 0, color: '#854d0e' },
     { label: 'Czeka części',val: stats.statusy['Czeka na części'] || 0, color: '#9a3412' },
@@ -788,6 +819,206 @@ async function usunMechanika(id) {
   });
 }
 
+// ── Konta nadawcze (SMTP) — pod-zakładka w widoku Gmail ────────────────
+
+const GMAIL_KOLORY = ['#d97757', '#2563eb', '#9333ea', '#16a34a', '#ea580c', '#0891b2', '#dc2626'];
+function gmailKolor(email) {
+  let h = 0;
+  for (const ch of email) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  return GMAIL_KOLORY[h % GMAIL_KOLORY.length];
+}
+
+async function renderKontaNadawcze() {
+  const konta = await window.api.gmail.lista().catch(() => []);
+  const aktywne = konta.find(k => k.active);
+
+  const cards = konta.length ? konta.map(k => `
+    <div class="gmail-card${k.active ? ' active' : ''}" onclick="${k.active ? '' : `przelaczGmail('${k.id}')`}">
+      <div class="gmail-avatar" style="background:${gmailKolor(k.email)}">${esc((k.email[0] || '?').toUpperCase())}</div>
+      <div class="gmail-info">
+        <div class="gmail-email">${esc(k.email)}</div>
+        <div class="gmail-meta">${esc(k.host || 'smtp.gmail.com')} · dodano ${new Date(k.added_at).toLocaleDateString('pl-PL')}</div>
+      </div>
+      ${k.active
+        ? `<span class="gmail-active-badge">✓ Aktywne</span>
+           <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();testGmail(this)">📧 Test</button>`
+        : `<span class="gmail-switch-hint">Kliknij, aby przełączyć →</span>`}
+      <button class="btn-icon-sm btn-danger-icon" title="Usuń konto" onclick="event.stopPropagation();usunGmail('${k.id}','${esc(k.email)}')">🗑</button>
+    </div>`).join('')
+    : `<div class="empty-state"><div class="empty-icon">📭</div><div>Brak kont — dodaj pierwsze konto Gmail obok</div></div>`;
+
+  document.getElementById('gmailSmtpWrap').innerHTML = `
+    <div class="content-wrap">
+      <div class="page-title">
+        Konta nadawcze (SMTP)
+        ${aktywne ? `<span class="numer-preview" style="font-family:inherit">wysyła: ${esc(aktywne.email)}</span>` : ''}
+      </div>
+      <div class="gmail-layout">
+        <div>
+          <div class="section-label mb-2">Zapisane konta (${konta.length}) — aktywne konto wysyła wszystkie e-maile z systemu</div>
+          ${cards}
+        </div>
+        <div class="section-card" style="align-self:start">
+          <div class="section-label">Dodaj konto Gmail</div>
+          <div class="settings-hint">
+            Włącz weryfikację dwuetapową w koncie Google, wejdź w
+            <strong>Bezpieczeństwo → Hasła do aplikacji</strong>
+            i wygeneruj hasło dla „Poczta".
+          </div>
+          <div class="form-group"><label class="form-label">Adres Gmail</label>
+            <input class="form-control" id="gm-email" type="email" placeholder="twojmail@gmail.com"></div>
+          <div class="form-group"><label class="form-label">Hasło aplikacji</label>
+            <input class="form-control" id="gm-pass" type="password" placeholder="xxxx xxxx xxxx xxxx"
+              onkeydown="if(event.key==='Enter')dodajGmail()"></div>
+          <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="dodajGmail()">＋ Dodaj konto</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function przelaczGmail(id) {
+  const r = await window.api.gmail.aktywuj(id);
+  if (r.ok) { toast(`✓ Aktywne konto: ${r.email}`); renderKontaNadawcze(); }
+  else toast(r.error || 'Błąd przełączania konta', 'error');
+}
+
+async function dodajGmail() {
+  const email = val('gm-email');
+  const pass  = val('gm-pass');
+  if (!email) { document.getElementById('gm-email').focus(); return; }
+  if (!pass)  { document.getElementById('gm-pass').focus(); return; }
+  const r = await window.api.gmail.dodaj({ email, pass });
+  if (r.ok) { toast(`Dodano konto ${email}`); renderKontaNadawcze(); }
+  else toast(r.error || 'Błąd dodawania konta', 'error');
+}
+
+function usunGmail(id, email) {
+  showConfirm(`Usunąć konto ${email}?`, async () => {
+    await window.api.gmail.usun(id);
+    toast('Konto usunięte');
+    renderKontaNadawcze();
+  });
+}
+
+async function testGmail(btn) {
+  btn.disabled = true; btn.textContent = '⏳...';
+  const res = await window.api.email.test().catch(e => ({ ok: false, error: String(e.message || e) }));
+  btn.disabled = false; btn.textContent = '📧 Test';
+  if (res.ok) toast('E-mail testowy wysłany — sprawdź skrzynkę');
+  else toast('Błąd SMTP: ' + res.error, 'error');
+}
+
+// ── Gmail — wbudowana skrzynka (webview) ───────────────────────────────
+// Każde konto ma własną partycję sesji Chromium (persist:gmailweb_<id>),
+// więc kilka kont Google może być zalogowanych równocześnie — przełączanie
+// to tylko pokazanie innego webview, bez ponownego logowania.
+
+// Firefox UA — patrz komentarz w main.js przy app.userAgentFallback
+const GMAIL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
+let gmailWebAccounts = [];
+let activeGmailWebId = null;
+let gmailSub = 'skrzynka';
+
+async function initGmailWeb() {
+  gmailWebAccounts = await window.api.gmailWeb.lista().catch(() => []);
+  if (!activeGmailWebId || !gmailWebAccounts.some(a => a.id === activeGmailWebId)) {
+    activeGmailWebId = gmailWebAccounts.length ? gmailWebAccounts[0].id : null;
+  }
+  pokazGmailSub(gmailSub);
+}
+
+function pokazGmailSub(sub) {
+  gmailSub = sub;
+  document.getElementById('gmSubSkrzynka').classList.toggle('active', sub === 'skrzynka');
+  document.getElementById('gmSubNadawcze').classList.toggle('active', sub === 'nadawcze');
+  document.getElementById('gmailWebWrap').classList.toggle('d-none', sub !== 'skrzynka');
+  document.getElementById('gmailSmtpWrap').classList.toggle('d-none', sub !== 'nadawcze');
+  document.getElementById('gmailPills').style.visibility      = sub === 'skrzynka' ? 'visible' : 'hidden';
+  document.getElementById('gmailBarActions').style.visibility = sub === 'skrzynka' ? 'visible' : 'hidden';
+  if (sub === 'skrzynka') {
+    renderGmailPills();
+    if (activeGmailWebId) aktywujGmailWeb(activeGmailWebId);
+    else document.getElementById('gmailEmpty').classList.remove('d-none');
+  } else {
+    renderKontaNadawcze();
+  }
+}
+
+function renderGmailPills() {
+  const el = document.getElementById('gmailPills');
+  el.innerHTML = gmailWebAccounts.map(a => {
+    const label = a.label || 'Nowe konto — zaloguj się';
+    return `<div class="gmail-pill${a.id === activeGmailWebId ? ' active' : ''}" onclick="aktywujGmailWeb('${a.id}')" title="${esc(label)}">
+      <span class="gmail-pill-avatar" style="background:${gmailKolor(label)}">${esc((label[0] || '?').toUpperCase())}</span>
+      <span class="gmail-pill-label">${esc(label)}</span>
+      <button class="gmail-pill-x" title="Usuń i wyloguj konto" onclick="event.stopPropagation();usunGmailWeb('${a.id}')">×</button>
+    </div>`;
+  }).join('');
+}
+
+function ensureGmailWebview(acc) {
+  let wv = document.getElementById('gmwv-' + acc.id);
+  if (wv) return wv;
+  wv = document.createElement('webview');
+  wv.id = 'gmwv-' + acc.id;
+  wv.className = 'gmail-webview';
+  wv.setAttribute('partition', 'persist:gmailweb_' + acc.id);
+  wv.setAttribute('useragent', GMAIL_UA);
+  wv.setAttribute('allowpopups', 'true');
+  wv.src = 'https://mail.google.com/mail/u/0/';
+  // Gmail wpisuje adres zalogowanego konta do tytułu karty — użyj go jako etykiety
+  wv.addEventListener('page-title-updated', async (e) => {
+    const m = (e.title || '').match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
+    if (m && m[0] !== acc.label) {
+      acc.label = m[0];
+      await window.api.gmailWeb.aktualizuj({ id: acc.id, label: m[0] }).catch(() => {});
+      renderGmailPills();
+    }
+  });
+  document.getElementById('gmailWebWrap').appendChild(wv);
+  return wv;
+}
+
+function aktywujGmailWeb(id) {
+  const acc = gmailWebAccounts.find(a => a.id === id);
+  if (!acc) return;
+  activeGmailWebId = id;
+  document.getElementById('gmailEmpty').classList.add('d-none');
+  ensureGmailWebview(acc);
+  document.querySelectorAll('.gmail-webview').forEach(w => w.classList.toggle('active', w.id === 'gmwv-' + id));
+  renderGmailPills();
+}
+
+async function dodajGmailWeb() {
+  const r = await window.api.gmailWeb.dodaj();
+  if (!r.ok) { toast(r.error || 'Błąd dodawania konta', 'error'); return; }
+  gmailWebAccounts = await window.api.gmailWeb.lista().catch(() => []);
+  if (gmailSub !== 'skrzynka') pokazGmailSub('skrzynka');
+  aktywujGmailWeb(r.id);
+  toast('Zaloguj się na swoje konto Google w oknie poniżej');
+}
+
+function usunGmailWeb(id) {
+  const acc = gmailWebAccounts.find(a => a.id === id);
+  showConfirm(`Usunąć konto ${acc && acc.label ? acc.label : 'Gmail'} i wylogować je z aplikacji?`, async () => {
+    await window.api.gmailWeb.usun(id);
+    const wv = document.getElementById('gmwv-' + id);
+    if (wv) wv.remove();
+    gmailWebAccounts = await window.api.gmailWeb.lista().catch(() => []);
+    if (activeGmailWebId === id) activeGmailWebId = gmailWebAccounts.length ? gmailWebAccounts[0].id : null;
+    if (activeGmailWebId) aktywujGmailWeb(activeGmailWebId);
+    else { renderGmailPills(); document.getElementById('gmailEmpty').classList.remove('d-none'); }
+    toast('Konto usunięte i wylogowane');
+  });
+}
+
+function odswiezGmailWeb() {
+  const wv = document.getElementById('gmwv-' + activeGmailWebId);
+  if (wv) wv.reload();
+  else toast('Najpierw dodaj konto Gmail', 'warning');
+}
+
 // ── Photos ─────────────────────────────────────────────────────────────
 
 async function renderZdjecia(zlecenieId) {
@@ -913,7 +1144,7 @@ async function savePhoto() {
 // ── Phone modal ────────────────────────────────────────────────────────
 async function openPhoneModal() {
   document.getElementById('phoneModal').classList.remove('d-none');
-  document.getElementById('phoneQR').innerHTML = '<div style="color:#94a3b8;text-align:center;padding:20px">Ładowanie...</div>';
+  document.getElementById('phoneQR').innerHTML = '<div style="color:var(--slate-400);text-align:center;padding:20px">Ładowanie...</div>';
 
   const [info, settings, mechanicy] = await Promise.all([
     window.api.server.info(),
@@ -928,20 +1159,20 @@ async function openPhoneModal() {
   const isCloud  = !!cloudUrl;
 
   function qrImg(url, size = 150) {
-    return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}" width="${size}" height="${size}" style="border-radius:10px;border:1px solid #e2e8f0;display:block">`;
+    return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}" width="${size}" height="${size}" style="border-radius:10px;border:1px solid var(--slate-200);display:block">`;
   }
 
   const mechCards = mechanicy.map(m => {
     const url = `${baseUrl}?m=${m.id}`;
-    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;display:flex;align-items:center;gap:14px">
+    return `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:12px;padding:12px;display:flex;align-items:center;gap:14px">
       ${qrImg(url, 100)}
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <div style="width:12px;height:12px;border-radius:50%;background:${m.kolor||'#16a34a'};flex-shrink:0"></div>
           <div style="font-weight:800;font-size:1rem">${esc(m.nazwa)}</div>
         </div>
-        <div style="font-family:monospace;font-size:1.5rem;font-weight:900;color:#1e293b;letter-spacing:.1em">${String(m.id).padStart(2,'0')}</div>
-        <div style="font-size:.7rem;color:#94a3b8;margin-top:3px">Skanuj QR lub wpisz kod w aplikacji</div>
+        <div style="font-family:monospace;font-size:1.5rem;font-weight:900;color:var(--slate-800);letter-spacing:.1em">${String(m.id).padStart(2,'0')}</div>
+        <div style="font-size:.7rem;color:var(--slate-400);margin-top:3px">Skanuj QR lub wpisz kod w aplikacji</div>
       </div>
     </div>`;
   }).join('');
@@ -956,13 +1187,13 @@ async function openPhoneModal() {
       </div>`;
   document.getElementById('phoneQR').innerHTML = `
     ${cloudNote}
-    <div style="text-align:center;margin-bottom:16px;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px">
-      <div style="font-size:.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px">Administrator — pełny dostęp</div>
+    <div style="text-align:center;margin-bottom:16px;padding:14px;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:12px">
+      <div style="font-size:.68rem;color:var(--slate-400);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px">Administrator — pełny dostęp</div>
       ${qrImg(adminUrl, 170)}
-      <div style="font-size:.7rem;color:#94a3b8;margin-top:8px">Skanuj telefonem → natychmiastowy pełny dostęp</div>
+      <div style="font-size:.7rem;color:var(--slate-400);margin-top:8px">Skanuj telefonem → natychmiastowy pełny dostęp</div>
     </div>
     ${mechanicy.length ? `
-      <div style="font-size:.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:8px">Konta mechaników</div>
+      <div style="font-size:.68rem;color:var(--slate-400);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:8px">Konta mechaników</div>
       <div style="display:flex;flex-direction:column;gap:8px">${mechCards}</div>
     ` : ''}
   `;
@@ -990,22 +1221,22 @@ async function renderTunnelContent() {
           <span style="color:#16a34a;font-size:.8rem;font-weight:800">● AKTYWNY</span>
         </div>
         <img src="${qr}" style="border-radius:10px;display:block;margin:0 auto 12px" width="180">
-        <div style="font-family:monospace;font-size:.75rem;color:#64748b;word-break:break-all;margin-bottom:16px">${st.url}</div>
-        <p style="font-size:.82rem;color:#64748b;margin-bottom:20px">Zeskanuj telefonem lub wpisz ten adres w aplikacji Android</p>
-        <button onclick="stopTunnel()" style="width:100%;padding:11px;background:#fff;border:2px solid #fecaca;color:#ef4444;border-radius:10px;font-weight:700;cursor:pointer">Zatrzymaj tunel</button>
+        <div style="font-family:monospace;font-size:.75rem;color:var(--slate-500);word-break:break-all;margin-bottom:16px">${st.url}</div>
+        <p style="font-size:.82rem;color:var(--slate-500);margin-bottom:20px">Zeskanuj telefonem lub wpisz ten adres w aplikacji Android</p>
+        <button onclick="stopTunnel()" style="width:100%;padding:11px;background:var(--surface);border:2px solid #fecaca;color:#ef4444;border-radius:10px;font-weight:700;cursor:pointer">Zatrzymaj tunel</button>
       </div>`;
     document.getElementById('tunnelDot').style.display = 'block';
   } else if (!st.hasBinary) {
     el.innerHTML = `
       <div style="text-align:center;padding:8px 0 16px">
         <div style="font-size:2.5rem;margin-bottom:10px">📥</div>
-        <p style="font-size:.9rem;color:#1e293b;font-weight:700;margin-bottom:6px">Pierwsze uruchomienie</p>
-        <p style="font-size:.82rem;color:#64748b;margin-bottom:20px">Pobierze się narzędzie Cloudflare (~70 MB) — jednorazowo</p>
+        <p style="font-size:.9rem;color:var(--slate-800);font-weight:700;margin-bottom:6px">Pierwsze uruchomienie</p>
+        <p style="font-size:.82rem;color:var(--slate-500);margin-bottom:20px">Pobierze się narzędzie Cloudflare (~70 MB) — jednorazowo</p>
         <div id="tunnelProgress" style="display:none;margin-bottom:16px">
-          <div style="background:#e2e8f0;border-radius:100px;height:8px;overflow:hidden">
+          <div style="background:var(--slate-200);border-radius:100px;height:8px;overflow:hidden">
             <div id="tunnelBar" style="height:100%;background:#16a34a;border-radius:100px;width:0;transition:width .3s"></div>
           </div>
-          <div id="tunnelPct" style="font-size:.78rem;color:#64748b;margin-top:6px;text-align:center">0%</div>
+          <div id="tunnelPct" style="font-size:.78rem;color:var(--slate-500);margin-top:6px;text-align:center">0%</div>
         </div>
         <button id="tunnelDownloadBtn" onclick="downloadAndStart()" style="width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:800;cursor:pointer">Pobierz i uruchom</button>
       </div>`;
@@ -1013,8 +1244,8 @@ async function renderTunnelContent() {
     el.innerHTML = `
       <div style="text-align:center;padding:8px 0 16px">
         <div style="font-size:2.5rem;margin-bottom:10px">🌐</div>
-        <p style="font-size:.9rem;color:#1e293b;font-weight:700;margin-bottom:6px">Tunel nieaktywny</p>
-        <p style="font-size:.82rem;color:#64748b;margin-bottom:20px">Uruchom aby uzyskać publiczny link — aplikacja Android będzie działać wszędzie</p>
+        <p style="font-size:.9rem;color:var(--slate-800);font-weight:700;margin-bottom:6px">Tunel nieaktywny</p>
+        <p style="font-size:.82rem;color:var(--slate-500);margin-bottom:20px">Uruchom aby uzyskać publiczny link — aplikacja Android będzie działać wszędzie</p>
         <button id="tunnelStartBtn" onclick="startTunnel()" style="width:100%;padding:13px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:800;cursor:pointer">Uruchom tunel</button>
       </div>`;
     document.getElementById('tunnelDot').style.display = 'none';
@@ -1105,16 +1336,16 @@ async function renderSklep() {
     const d = new Date(p.created_at).toLocaleDateString('pl-PL', { day:'2-digit', month:'2-digit', year:'2-digit' });
     const masz = [p.marka, p.model].filter(Boolean).join(' ') || '—';
     const statusCls = { oczekuje: 'background:#fef3c7;color:#92400e', zamowione: 'background:#dbeafe;color:#1e40af', dostarczone: 'background:#dcfce7;color:#15803d' }[p.status] || '';
-    return `<tr style="border-bottom:1px solid #f1f5f9">
+    return `<tr style="border-bottom:1px solid var(--slate-100)">
       <td style="padding:10px 12px;font-weight:800;font-size:.95rem">${esc(p.nazwa_czesci)}</td>
       <td style="padding:10px 12px;text-align:center;font-weight:700;font-size:1rem">${p.ilosc}</td>
-      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${esc(p.numer_zlecenia)}<br><span style="color:#94a3b8">${esc(masz)}</span></td>
-      <td style="padding:10px 12px;font-size:.82rem;color:#475569">${esc(p.mechanik_nazwa || '—')}<br><span style="color:#94a3b8">${d}</span></td>
-      <td style="padding:10px 12px;font-size:.78rem;color:#64748b">${esc(p.uwagi || '')}</td>
+      <td style="padding:10px 12px;font-size:.82rem;color:var(--slate-600)">${esc(p.numer_zlecenia)}<br><span style="color:var(--slate-400)">${esc(masz)}</span></td>
+      <td style="padding:10px 12px;font-size:.82rem;color:var(--slate-600)">${esc(p.mechanik_nazwa || '—')}<br><span style="color:var(--slate-400)">${d}</span></td>
+      <td style="padding:10px 12px;font-size:.78rem;color:var(--slate-500)">${esc(p.uwagi || '')}</td>
       <td style="padding:10px 12px;white-space:nowrap">
         ${p.status === 'oczekuje'   ? `<button class="btn btn-outline btn-sm" onclick="sklepStatus(${p.id},'zamowione')">✓ Zamówione</button>` : ''}
         ${p.status === 'zamowione'  ? `<button class="btn btn-outline btn-sm" style="border-color:#16a34a;color:#16a34a" onclick="sklepStatus(${p.id},'dostarczone')">✓ Dostarczone</button>` : ''}
-        ${p.status !== 'oczekuje'   ? `<button class="btn btn-sm" style="background:none;border:1px solid #e2e8f0;color:#64748b;padding:3px 7px;border-radius:6px;font-size:.72rem" onclick="sklepStatus(${p.id},'oczekuje')" title="Cofnij do oczekujących">↩</button>` : ''}
+        ${p.status !== 'oczekuje'   ? `<button class="btn btn-sm" style="background:none;border:1px solid var(--slate-200);color:var(--slate-500);padding:3px 7px;border-radius:6px;font-size:.72rem" onclick="sklepStatus(${p.id},'oczekuje')" title="Cofnij do oczekujących">↩</button>` : ''}
         <button class="btn btn-sm" style="margin-left:2px;background:none;border:1px solid #fecaca;color:#ef4444;padding:4px 8px;border-radius:6px" onclick="sklepUsun(${p.id})">🗑</button>
       </td>
     </tr>`;
@@ -1124,11 +1355,11 @@ async function renderSklep() {
   const allegroSt = await window.api.allegro.status().catch(() => ({ connected: false }));
 
   el.innerHTML = `
-    <div style="padding:20px 24px">
+    <div class="content-wrap">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:gap;gap:10px">
         <div>
-          <div style="font-size:1.1rem;font-weight:900;color:#1e293b">📦 Zamówienia części</div>
-          <div style="font-size:.8rem;color:#64748b;margin-top:2px">Mechanicy zgłaszają braki — wysyłasz email do dostawcy</div>
+          <div style="font-size:1.1rem;font-weight:900;color:var(--slate-800)">📦 Zamówienia części</div>
+          <div style="font-size:.8rem;color:var(--slate-500);margin-top:2px">Mechanicy zgłaszają braki — wysyłasz email do dostawcy</div>
         </div>
         <button onclick="sklepWyslijEmail()" class="btn btn-primary" ${!canEmail ? 'disabled' : ''}
           title="${!emailTo ? 'Ustaw email dostawcy w Ustawieniach' : !oczekujace.length ? 'Brak oczekujących zamówień' : ''}">
@@ -1144,23 +1375,23 @@ async function renderSklep() {
         ${[['oczekuje','🕐 Oczekujące',oczekujace.length,'#fef3c7','#92400e'],
            ['zamowione','📬 Zamówione',zamowione.length,'#dbeafe','#1e40af'],
            ['dostarczone','✅ Dostarczone',dostarczone.length,'#dcfce7','#15803d']].map(([s,l,c,bg,col]) => `
-          <button onclick="sklepFilter='${s}';renderSklep()" style="padding:6px 14px;border-radius:8px;border:2px solid ${sklepFilter===s?col:'#e2e8f0'};background:${sklepFilter===s?bg:'white'};color:${sklepFilter===s?col:'#64748b'};font-size:.82rem;font-weight:${sklepFilter===s?'800':'500'};cursor:pointer">
+          <button onclick="sklepFilter='${s}';renderSklep()" style="padding:6px 14px;border-radius:8px;border:2px solid ${sklepFilter===s?col:'var(--slate-200)'};background:${sklepFilter===s?bg:'var(--surface)'};color:${sklepFilter===s?col:'var(--slate-500)'};font-size:.82rem;font-weight:${sklepFilter===s?'800':'500'};cursor:pointer">
             ${l} <span style="font-weight:900">${c}</span>
           </button>`).join('')}
       </div>
 
-      ${filtered.length === 0 ? `<div style="text-align:center;padding:48px 24px;color:#94a3b8">
+      ${filtered.length === 0 ? `<div style="text-align:center;padding:48px 24px;color:var(--slate-400)">
         <div style="font-size:2rem;margin-bottom:8px">📭</div>
         <div style="font-size:.9rem">Brak pozycji w tej kategorii</div>
       </div>` : `
-      <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+      <div style="background:var(--surface);border:1px solid var(--slate-200);border-radius:12px;overflow:hidden">
         <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="background:#f8fafc">
-            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Część</th>
-            <th style="padding:10px 12px;text-align:center;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Ilość</th>
-            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Zlecenie</th>
-            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Mechanik / Data</th>
-            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Uwagi</th>
+          <thead><tr style="background:var(--slate-50)">
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:var(--slate-500);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Część</th>
+            <th style="padding:10px 12px;text-align:center;font-size:.75rem;color:var(--slate-500);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Ilość</th>
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:var(--slate-500);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Zlecenie</th>
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:var(--slate-500);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Mechanik / Data</th>
+            <th style="padding:10px 12px;text-align:left;font-size:.75rem;color:var(--slate-500);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Uwagi</th>
             <th style="padding:10px 12px"></th>
           </tr></thead>
           <tbody>${filtered.map(rowHtml).join('')}</tbody>
@@ -1171,8 +1402,8 @@ async function renderSklep() {
       <div style="margin-top:28px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div>
-            <div style="font-size:1rem;font-weight:900;color:#1e293b">🛒 Zamówienia Allegro</div>
-            <div style="font-size:.78rem;color:#64748b;margin-top:2px">Opłacone zamówienia gotowe do realizacji</div>
+            <div style="font-size:1rem;font-weight:900;color:var(--slate-800)">🛒 Zamówienia Allegro</div>
+            <div style="font-size:.78rem;color:var(--slate-500);margin-top:2px">Opłacone zamówienia gotowe do realizacji</div>
           </div>
           ${allegroSt.connected
             ? `<button class="btn btn-outline btn-sm" onclick="odswiezAllegro()">↺ Odśwież</button>`
@@ -1181,8 +1412,8 @@ async function renderSklep() {
         </div>
         <div id="allegroOrders">
           ${allegroSt.connected
-            ? '<div style="color:#94a3b8;font-size:.82rem;text-align:center;padding:20px">Ładowanie zamówień...</div>'
-            : `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;text-align:center;color:#94a3b8;font-size:.85rem">
+            ? '<div style="color:var(--slate-400);font-size:.82rem;text-align:center;padding:20px">Ładowanie zamówień...</div>'
+            : `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:10px;padding:20px;text-align:center;color:var(--slate-400);font-size:.85rem">
                 Podłącz konto Allegro w Ustawieniach → 🛒 Allegro aby zobaczyć zamówienia tutaj
                </div>`
           }
@@ -1197,26 +1428,26 @@ async function renderSklep() {
 async function odswiezAllegro() {
   const el = document.getElementById('allegroOrders');
   if (!el) return;
-  el.innerHTML = '<div style="color:#94a3b8;font-size:.82rem;text-align:center;padding:20px">Ładowanie...</div>';
+  el.innerHTML = '<div style="color:var(--slate-400);font-size:.82rem;text-align:center;padding:20px">Ładowanie...</div>';
   const res = await window.api.allegro.zamowienia();
   if (!res.ok) {
     el.innerHTML = `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;color:#dc2626;font-size:.85rem">Błąd: ${res.error}</div>`;
     return;
   }
   if (!res.data.length) {
-    el.innerHTML = '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;text-align:center;color:#94a3b8;font-size:.85rem">Brak nowych zamówień Allegro do realizacji</div>';
+    el.innerHTML = '<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:10px;padding:20px;text-align:center;color:var(--slate-400);font-size:.85rem">Brak nowych zamówień Allegro do realizacji</div>';
     return;
   }
   window._allegroForms = res.data;
   el.innerHTML = res.data.map((f, idx) => {
-    const items = f.items.map(i => `<span style="font-size:.8rem;color:#475569">${esc(i.name)} ×${i.qty}</span>`).join('<br>');
-    return `<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start">
+    const items = f.items.map(i => `<span style="font-size:.8rem;color:var(--slate-600)">${esc(i.name)} ×${i.qty}</span>`).join('<br>');
+    return `<div style="background:var(--surface);border:1px solid var(--slate-200);border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start">
       <div style="font-size:1.6rem;flex-shrink:0">🛒</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:.95rem;margin-bottom:2px">${esc(f.buyer_name)}</div>
-        <div style="font-size:.8rem;color:#64748b;margin-bottom:4px">${esc(f.buyer_email)}${f.buyer_phone ? ' · ' + esc(f.buyer_phone) : ''}</div>
+        <div style="font-size:.8rem;color:var(--slate-500);margin-bottom:4px">${esc(f.buyer_email)}${f.buyer_phone ? ' · ' + esc(f.buyer_phone) : ''}</div>
         <div style="margin-bottom:6px">${items}</div>
-        <div style="font-size:.78rem;color:#94a3b8">Wartość: ${esc(f.total)} ${esc(f.currency)} · #${esc(String(f.id).slice(0,8))}...</div>
+        <div style="font-size:.78rem;color:var(--slate-400)">Wartość: ${esc(f.total)} ${esc(f.currency)} · #${esc(String(f.id).slice(0,8))}...</div>
       </div>
       <button onclick="allegroDoWarsztatu(${idx})"
         class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
@@ -1290,6 +1521,7 @@ async function openSettings() {
   document.getElementById('set-smtp-host').value  = s.smtp_host  || 'smtp.gmail.com';
   document.getElementById('set-smtp-port').value  = s.smtp_port  || 587;
   document.getElementById('set-public-url').value = s.public_url || '';
+  document.getElementById('set-cloud-key').value  = s.cloud_api_key || '';
   document.getElementById('set-apilo-url').value    = s.apilo_url    || '';
   document.getElementById('set-apilo-id').value     = s.apilo_client_id     || '';
   document.getElementById('set-apilo-secret').value = s.apilo_client_secret || '';
@@ -1329,17 +1561,17 @@ async function renderApiKeysList() {
   if (!list) return;
   const keys = await window.api.apiKeys.lista();
   if (!keys.length) {
-    list.innerHTML = '<div style="color:#94a3b8;font-size:.82rem;padding:4px 0">Brak kluczy — wygeneruj pierwszy klucz poniżej.</div>';
+    list.innerHTML = '<div style="color:var(--slate-400);font-size:.82rem;padding:4px 0">Brak kluczy — wygeneruj pierwszy klucz poniżej.</div>';
     return;
   }
   list.innerHTML = keys.map(k => `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;margin-bottom:6px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.85rem">${k.label}</div>
-        <div style="font-family:monospace;font-size:.75rem;color:#475569;word-break:break-all">${k.key}</div>
-        <div style="font-size:.7rem;color:#94a3b8">${new Date(k.created_at).toLocaleDateString('pl-PL')}</div>
+        <div style="font-family:monospace;font-size:.75rem;color:var(--slate-600);word-break:break-all">${k.key}</div>
+        <div style="font-size:.7rem;color:var(--slate-400)">${new Date(k.created_at).toLocaleDateString('pl-PL')}</div>
       </div>
-      <button onclick="copyApiKey('${k.key}')" title="Kopiuj klucz" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.8rem">📋</button>
+      <button onclick="copyApiKey('${k.key}')" title="Kopiuj klucz" style="background:none;border:1px solid var(--slate-200);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.8rem">📋</button>
       <button onclick="deleteApiKey('${k.key}')" title="Usuń klucz" style="background:none;border:1px solid #fecaca;border-radius:6px;padding:4px 8px;cursor:pointer;color:#ef4444;font-size:.8rem">🗑</button>
     </div>
   `).join('');
@@ -1370,17 +1602,17 @@ function openApiDocs() {
   const exampleKey = keys.length ? keys[0].textContent.trim() : 'agro_TWOJ_KLUCZ_API';
   document.getElementById('apiDocsContent').innerHTML = `
     <div style="padding:4px 0 12px">
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:14px;font-size:.8rem">
-        <div style="font-weight:700;color:#1e293b;margin-bottom:6px">Base URL</div>
+      <div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:12px;margin-bottom:14px;font-size:.8rem">
+        <div style="font-weight:700;color:var(--slate-800);margin-bottom:6px">Base URL</div>
         <code style="font-size:.85rem;color:#16a34a">${base}</code>
       </div>
-      <div style="font-weight:700;font-size:.85rem;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Autoryzacja</div>
-      <div style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:.8rem;margin-bottom:16px;overflow-x:auto">
+      <div style="font-weight:700;font-size:.85rem;color:var(--slate-600);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Autoryzacja</div>
+      <div style="background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:12px;font-family:monospace;font-size:.8rem;margin-bottom:16px;overflow-x:auto">
 Authorization: Bearer ${exampleKey}<br>
-<span style="color:#94a3b8"># lub:</span><br>
+<span style="color:var(--slate-400)"># lub:</span><br>
 X-API-Key: ${exampleKey}
       </div>
-      <div style="font-weight:700;font-size:.85rem;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Endpointy</div>
+      <div style="font-weight:700;font-size:.85rem;color:var(--slate-600);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Endpointy</div>
       ${[
         ['GET',   '/api/v1/ping',              'Sprawdź połączenie (bez autoryzacji)'],
         ['GET',   '/api/v1/mechanicy',          'Lista mechaników'],
@@ -1389,14 +1621,14 @@ X-API-Key: ${exampleKey}
         ['GET',   '/api/v1/zlecenia/{id}',      'Pobierz zlecenie z częściami'],
         ['PATCH', '/api/v1/zlecenia/{id}',      'Aktualizuj zlecenie (status, pola)'],
       ].map(([m, p, d]) => `
-        <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9">
+        <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--slate-100)">
           <span style="font-family:monospace;font-size:.75rem;font-weight:800;color:${m==='GET'?'#2563eb':m==='POST'?'#16a34a':m==='PATCH'?'#ea580c':'#dc2626'};min-width:44px">${m}</span>
-          <code style="font-size:.78rem;color:#1e293b;flex:1">${p}</code>
-          <span style="font-size:.75rem;color:#64748b">${d}</span>
+          <code style="font-size:.78rem;color:var(--slate-800);flex:1">${p}</code>
+          <span style="font-size:.75rem;color:var(--slate-500)">${d}</span>
         </div>
       `).join('')}
-      <div style="margin-top:16px;font-weight:700;font-size:.85rem;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Przykład — utwórz zlecenie</div>
-      <div style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:.75rem;overflow-x:auto;white-space:pre">curl -X POST ${base}/api/v1/zlecenia \\
+      <div style="margin-top:16px;font-weight:700;font-size:.85rem;color:var(--slate-600);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Przykład — utwórz zlecenie</div>
+      <div style="background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:12px;font-family:monospace;font-size:.75rem;overflow-x:auto;white-space:pre">curl -X POST ${base}/api/v1/zlecenia \\
   -H "Authorization: Bearer ${exampleKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -1408,7 +1640,7 @@ X-API-Key: ${exampleKey}
     "opis_usterki": "Nie odpala silnik",
     "zrodlo": "allegro"
   }'</div>
-      <div style="margin-top:10px;background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px;font-family:monospace;font-size:.75rem;overflow-x:auto;white-space:pre">{
+      <div style="margin-top:10px;background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:12px;font-family:monospace;font-size:.75rem;overflow-x:auto;white-space:pre">{
   "id": 42,
   "numer": "SRW/2026/07/001",
   "tracking_url": "${base}/sledz/abc123..."
@@ -1432,6 +1664,7 @@ async function saveSettings() {
     smtp_host:  document.getElementById('set-smtp-host').value.trim() || 'smtp.gmail.com',
     smtp_port:  parseInt(document.getElementById('set-smtp-port').value) || 587,
     public_url: document.getElementById('set-public-url').value.trim().replace(/\/$/, ''),
+    cloud_api_key: document.getElementById('set-cloud-key').value.trim(),
     apilo_url:           document.getElementById('set-apilo-url').value.trim().replace(/\/$/, ''),
     apilo_client_id:     document.getElementById('set-apilo-id').value.trim(),
     apilo_client_secret: document.getElementById('set-apilo-secret').value.trim(),
@@ -1715,6 +1948,7 @@ td{padding:5px 8px;border-bottom:1px solid #f1f5f9}
 
 // ── Init ───────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
+  applyTheme();
   mechanicyCache = await window.api.mechanicy.lista();
   await renderPickerGrid();
   showScreen('pickerScreen');

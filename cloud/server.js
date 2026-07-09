@@ -101,6 +101,16 @@ function validateApiKey(req) {
   return keys.some(k => k.key === token);
 }
 
+// Klucz do synchronizacji z aplikacji desktop: zwykły klucz API albo ADMIN_KEY
+function validateSyncKey(req) {
+  if (validateApiKey(req)) return true;
+  const auth = req.headers['authorization'] || '';
+  const xkey = req.headers['x-api-key'] || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : xkey.trim();
+  const adminKey = process.env.ADMIN_KEY || '';
+  return !!adminKey && token === adminKey;
+}
+
 function generateNumer() {
   const d = new Date();
   const y = d.getFullYear();
@@ -173,9 +183,21 @@ body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSys
   Twój ${sprzet} został przyjęty do naszego serwisu. Możesz śledzić status naprawy w czasie rzeczywistym klikając przycisk poniżej.</p>
   <div class="order-box">
     <div class="order-num">${zlecenie.numer}</div>
-    <div class="order-row"><span style="color:#64748b">Sprzęt</span><span style="font-weight:700">${sprzet}</span></div>
-    <div class="order-row"><span style="color:#64748b">Data przyjęcia</span><span style="font-weight:700">${dateStr}</span></div>
-    <div class="order-row"><span style="color:#64748b">Status</span><span style="color:#16a34a;font-weight:700">${zlecenie.status}</span></div>
+    <!-- Gmail nie obsługuje display:flex w mailach — układ na tabeli inline -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">
+      <tr>
+        <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#64748b;font-size:14px">Sprzęt</td>
+        <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#1e293b;font-size:14px;font-weight:bold;text-align:right">${sprzet}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#64748b;font-size:14px">Data przyjęcia</td>
+        <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#1e293b;font-size:14px;font-weight:bold;text-align:right">${dateStr}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#64748b;font-size:14px">Status</td>
+        <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#16a34a;font-size:14px;font-weight:bold;text-align:right">${zlecenie.status}</td>
+      </tr>
+    </table>
   </div>
   <a href="${trackUrl}" class="btn-track">📍 Sprawdź status naprawy</a>
 </div>
@@ -260,6 +282,48 @@ async function handleApi(pathname, method, query, body, res, req) {
       saveDB();
       return sendJson(res, { success: true });
     }
+  }
+
+  // ── Sync z aplikacji desktop ─────────────────────────────────────────
+  // Desktop wypycha tu zlecenia (upsert po tokenie), żeby linki
+  // "Śledź naprawę" z e-maili działały na Railway nawet przy wyłączonym
+  // komputerze. Autoryzacja: klucz API (agro_*) lub ADMIN_KEY.
+  if (pathname === '/api/sync/zlecenia' && method === 'POST') {
+    if (!validateSyncKey(req)) return sendJson(res, { error: 'Brak autoryzacji — podaj klucz API lub ADMIN_KEY' }, 403);
+    const b = body || {};
+    if (!b.token || !b.numer) return sendJson(res, { error: 'Wymagane pola: token, numer' }, 400);
+    const pola = ['numer', 'klient_nazwa', 'klient_telefon', 'klient_email', 'marka', 'model',
+      'nr_seryjny', 'opis_usterki', 'uwagi', 'status', 'data_przyjecia', 'data_gotowosci',
+      'data_wydania', 'koszt_robocizny'];
+    let z = db.zlecenia.find(x => x.token === b.token);
+    if (!z) {
+      z = { id: db.nextId.zlecenia++, token: b.token, mechanik_id: null };
+      db.zlecenia.push(z);
+    }
+    pola.forEach(k => { if (k in b) z[k] = b[k]; });
+    if (Array.isArray(b.czesci)) {
+      if (!db.czesci) db.czesci = [];
+      if (!db.nextId.czesci) db.nextId.czesci = 1;
+      db.czesci = db.czesci.filter(c => c.zlecenie_id !== z.id);
+      b.czesci.forEach(c => db.czesci.push({
+        id: db.nextId.czesci++, zlecenie_id: z.id,
+        nazwa: String(c.nazwa || ''), ilosc: Number(c.ilosc) || 1,
+        cena_jednostkowa: Number(c.cena_jednostkowa) || 0,
+      }));
+    }
+    saveDB();
+    return sendJson(res, { ok: true, id: z.id });
+  }
+  const syncDelM = pathname.match(/^\/api\/sync\/zlecenia\/([a-f0-9]+)$/);
+  if (syncDelM && method === 'DELETE') {
+    if (!validateSyncKey(req)) return sendJson(res, { error: 'Brak autoryzacji' }, 403);
+    const z = db.zlecenia.find(x => x.token === syncDelM[1]);
+    if (z) {
+      db.zlecenia = db.zlecenia.filter(x => x.id !== z.id);
+      db.czesci = (db.czesci || []).filter(c => c.zlecenie_id !== z.id);
+      saveDB();
+    }
+    return sendJson(res, { ok: true });
   }
 
   // ── API v1 (zewnętrzne API z auth) ─────────────────────────────────────

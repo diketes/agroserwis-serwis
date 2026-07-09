@@ -43,6 +43,18 @@ contextBridge.exposeInMainWorld('api', {
     pobierz: ()     => ipcRenderer.invoke('settings:pobierz'),
     zapisz:  (data) => ipcRenderer.invoke('settings:zapisz', data),
   },
+  gmail: {
+    lista:   ()     => ipcRenderer.invoke('gmail:lista'),
+    dodaj:   (data) => ipcRenderer.invoke('gmail:dodaj', data),
+    aktywuj: (id)   => ipcRenderer.invoke('gmail:aktywuj', id),
+    usun:    (id)   => ipcRenderer.invoke('gmail:usun', id),
+  },
+  gmailWeb: {
+    lista:      ()     => ipcRenderer.invoke('gmailweb:lista'),
+    dodaj:      ()     => ipcRenderer.invoke('gmailweb:dodaj'),
+    aktualizuj: (data) => ipcRenderer.invoke('gmailweb:aktualizuj', data),
+    usun:       (id)   => ipcRenderer.invoke('gmailweb:usun', id),
+  },
   email: {
     wyslij: (id) => ipcRenderer.invoke('email:wyslij', id),
     test:   ()   => ipcRenderer.invoke('email:test'),

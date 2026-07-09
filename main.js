@@ -1,11 +1,20 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const urlModule = require('url');
 const crypto = require('crypto');
+
+// Google blokuje logowanie w osadzonych przeglądarkach ("Ta przeglądarka
+// lub aplikacja może nie być bezpieczna"). Czysty Chrome UA nie wystarcza,
+// bo Google weryfikuje spójność z Client Hints. Sprawdzone obejście:
+// przedstawiaj się jako Firefox (prostsza ścieżka logowania) i wyłącz
+// nagłówki sec-ch-ua, które zdradzałyby Chromium.
+const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
+app.userAgentFallback = FIREFOX_UA;
+app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint');
 const nodemailer = require('nodemailer');
 const https = require('https');
 const { spawn } = require('child_process');
@@ -40,6 +49,7 @@ const DEFAULT_SETTINGS = {
   smtp_user: '',
   smtp_pass: '',
   public_url: '',
+  cloud_api_key: '',
   apilo_url: '',
   apilo_client_id: '',
   apilo_client_secret: '',
@@ -55,6 +65,9 @@ const DEFAULT_SETTINGS = {
   shoper_url: '',
   shoper_api_key: '',
   shop_email_to: '',
+  gmail_accounts: [],
+  gmail_active_id: null,
+  gmail_web_accounts: [],
 };
 
 function loadDB() {
@@ -91,6 +104,20 @@ function loadDB() {
     Object.keys(DEFAULT_SETTINGS).forEach(k => {
       if (!(k in db.settings)) db.settings[k] = DEFAULT_SETTINGS[k];
     });
+    // Migracja: istniejące dane SMTP stają się pierwszym kontem Gmail
+    if (db.settings.smtp_user && db.settings.smtp_pass && !(db.settings.gmail_accounts || []).length) {
+      const acc = {
+        id: 'g' + Date.now(),
+        email: db.settings.smtp_user,
+        pass: db.settings.smtp_pass,
+        host: db.settings.smtp_host || 'smtp.gmail.com',
+        port: Number(db.settings.smtp_port) || 587,
+        added_at: new Date().toISOString(),
+      };
+      db.settings.gmail_accounts = [acc];
+      db.settings.gmail_active_id = acc.id;
+      saveDB();
+    }
     // Migrate: add tracking tokens to existing orders
     let tokenAdded = false;
     db.zlecenia.forEach(z => { if (!z.token) { z.token = generateToken(); tokenAdded = true; } });
@@ -126,6 +153,67 @@ function getTrackingUrl(token) {
   const base = (s.public_url || '').replace(/\/$/, '');
   if (base) return `${base}/sledz/${token}`;
   return `http://${getLocalIP()}:${HTTP_PORT}/sledz/${token}`;
+}
+
+// ── Synchronizacja zleceń z chmurą (Railway) ──────────────────────────
+// Link "Śledź naprawę" w e-mailach wskazuje na public_url (Railway), więc
+// zlecenie musi tam istnieć z TYM SAMYM tokenem. Wysyłka działa w tle —
+// błąd sieci nie może blokować pracy warsztatu.
+
+function cloudSyncEnabled() {
+  return !!(db.settings.public_url && db.settings.cloud_api_key);
+}
+
+async function syncZlecenieToCloud(z) {
+  if (!cloudSyncEnabled() || !z) return;
+  const payload = {
+    token: z.token, numer: z.numer,
+    klient_nazwa: z.klient_nazwa, klient_telefon: z.klient_telefon, klient_email: z.klient_email,
+    marka: z.marka, model: z.model, nr_seryjny: z.nr_seryjny,
+    opis_usterki: z.opis_usterki, uwagi: z.uwagi, status: z.status,
+    data_przyjecia: z.data_przyjecia, data_gotowosci: z.data_gotowosci, data_wydania: z.data_wydania,
+    koszt_robocizny: z.koszt_robocizny,
+    czesci: db.czesci.filter(c => c.zlecenie_id === z.id)
+      .map(c => ({ nazwa: c.nazwa, ilosc: c.ilosc, cena_jednostkowa: c.cena_jednostkowa })),
+  };
+  try {
+    await fetch(`${db.settings.public_url.replace(/\/$/, '')}/api/sync/zlecenia`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': db.settings.cloud_api_key },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) { console.error('Sync chmury nieudany:', e.message); }
+}
+
+async function deleteZlecenieFromCloud(token) {
+  if (!cloudSyncEnabled() || !token) return;
+  try {
+    await fetch(`${db.settings.public_url.replace(/\/$/, '')}/api/sync/zlecenia/${token}`, {
+      method: 'DELETE',
+      headers: { 'X-API-Key': db.settings.cloud_api_key },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) { console.error('Sync chmury nieudany:', e.message); }
+}
+
+async function syncAllToCloud() {
+  if (!cloudSyncEnabled()) return;
+  for (const z of db.zlecenia) await syncZlecenieToCloud(z);
+}
+
+function syncZlecenieByIdToCloud(zlecenieId) {
+  const z = db.zlecenia.find(x => x.id === zlecenieId);
+  if (z) syncZlecenieToCloud(z);
+}
+
+// Wiersz "etykieta — wartość" w e-mailach. Gmail nie obsługuje display:flex
+// w wiadomościach — jedyny niezawodny układ to tabela ze stylami inline.
+function emailRow(label, value, valColor = '#1e293b') {
+  return `<tr>
+    <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:#64748b;font-size:14px">${label}</td>
+    <td style="padding:6px 0;border-top:1px solid #f1f5f9;color:${valColor};font-size:14px;font-weight:bold;text-align:right">${value}</td>
+  </tr>`;
 }
 
 async function sendTrackingEmail(zlecenie) {
@@ -176,10 +264,12 @@ async function sendTrackingEmail(zlecenie) {
     </div>
     <div class="order-box">
       <div class="order-num">${zlecenie.numer}</div>
-      <div class="order-row"><span class="order-label">Sprzęt</span><span class="order-val">${sprzet}</span></div>
-      ${zlecenie.nr_seryjny ? `<div class="order-row"><span class="order-label">Nr seryjny</span><span class="order-val">${zlecenie.nr_seryjny}</span></div>` : ''}
-      <div class="order-row"><span class="order-label">Data przyjęcia</span><span class="order-val">${dateStr}</span></div>
-      <div class="order-row"><span class="order-label">Status</span><span class="order-val" style="color:#16a34a">${zlecenie.status}</span></div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">
+        ${emailRow('Sprzęt', sprzet)}
+        ${zlecenie.nr_seryjny ? emailRow('Nr seryjny', zlecenie.nr_seryjny) : ''}
+        ${emailRow('Data przyjęcia', dateStr)}
+        ${emailRow('Status', zlecenie.status, '#16a34a')}
+      </table>
     </div>
     <div class="btn-wrap">
       <a class="btn" href="${trackUrl}">Śledź naprawę →</a>
@@ -519,6 +609,9 @@ async function handleApi(pathname, method, query, body, res, req) {
       delete s.allegro_access_token; delete s.allegro_refresh_token; delete s.allegro_token_expires;
       delete s.allegro_client_secret;
       delete s.shoper_api_key;
+      delete s.cloud_api_key;
+      delete s.gmail_accounts;      // zawierają hasła aplikacji SMTP
+      delete s.gmail_web_accounts;
       return sendJson(res, s);
     }
     if (method === 'PUT') {
@@ -846,7 +939,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#1e293b;paddin
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1300, height: 820, minWidth: 900, minHeight: 600,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true },
     title: 'Agroserwis Nysa — System Serwisowy',
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -863,6 +956,13 @@ app.whenReady().then(() => {
   photosDir = path.join(app.getPath('userData'), 'photos');
   if (!fs.existsSync(photosDir)) fs.mkdirSync(photosDir, { recursive: true });
   loadDB();
+  // Konta Gmail, na które nigdy się nie zalogowano (brak etykiety), mogły
+  // zostać oflagowane przez Google przy nieudanej próbie — zacznij od czystej sesji
+  (db.settings.gmail_web_accounts || []).filter(a => !a.label).forEach(a => {
+    session.fromPartition('persist:gmailweb_' + a.id).clearStorageData().catch(() => {});
+  });
+  // Dosync wszystkich zleceń do Railway po starcie (w tle, po 4 s)
+  setTimeout(() => syncAllToCloud(), 4000);
   startHttpServer();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -943,6 +1043,8 @@ ipcMain.handle('zlecenia:dodaj', async (_, data) => {
     token,
   });
   saveDB();
+  // Wypchnij do chmury PRZED wysłaniem maila — link w mailu musi już działać
+  await syncZlecenieToCloud(db.zlecenia[db.zlecenia.length - 1]);
   // Auto-send tracking email if client has email and SMTP is configured
   let emailSent = false;
   if (data.klient_email && db.settings.smtp_user && db.settings.smtp_pass) {
@@ -960,6 +1062,7 @@ ipcMain.handle('zlecenia:aktualizuj', async (_, data) => {
   const allowed = ['klient_nazwa','klient_telefon','klient_email','marka','model','nr_seryjny','opis_usterki','uwagi','status','koszt_robocizny','data_gotowosci','data_wydania','mechanik_id'];
   allowed.forEach(k => { if (k in data) db.zlecenia[idx][k] = data[k]; });
   saveDB();
+  syncZlecenieToCloud(db.zlecenia[idx]);
   // Auto-send "ready" email when status changes to Gotowe
   if (data.status === 'Gotowe' && oldStatus !== 'Gotowe') {
     const z = db.zlecenia[idx];
@@ -971,9 +1074,11 @@ ipcMain.handle('zlecenia:aktualizuj', async (_, data) => {
 });
 
 ipcMain.handle('zlecenia:usun', (_, id) => {
+  const usuwane = db.zlecenia.find(z => z.id === id);
   db.zlecenia = db.zlecenia.filter(z => z.id !== id);
   db.czesci = db.czesci.filter(c => c.zlecenie_id !== id);
   saveDB();
+  if (usuwane) deleteZlecenieFromCloud(usuwane.token);
   return { success: true };
 });
 
@@ -981,12 +1086,15 @@ ipcMain.handle('czesci:dodaj', (_, data) => {
   const id = db.nextId.czesci++;
   db.czesci.push({ id, zlecenie_id: data.zlecenie_id, nazwa: data.nazwa, ilosc: data.ilosc, cena_jednostkowa: data.cena_jednostkowa });
   saveDB();
+  syncZlecenieByIdToCloud(data.zlecenie_id);
   return { id };
 });
 
 ipcMain.handle('czesci:usun', (_, id) => {
+  const czesc = db.czesci.find(c => c.id === id);
   db.czesci = db.czesci.filter(c => c.id !== id);
   saveDB();
+  if (czesc) syncZlecenieByIdToCloud(czesc.zlecenie_id);
   return { success: true };
 });
 
@@ -1089,12 +1197,108 @@ ipcMain.handle('settings:pobierz', () => ({ ...db.settings }));
 
 ipcMain.handle('settings:zapisz', (_, data) => {
   const allowed = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'public_url',
-    'apilo_url', 'apilo_client_id', 'apilo_client_secret',
+    'cloud_api_key', 'apilo_url', 'apilo_client_id', 'apilo_client_secret',
     'allegro_client_id', 'allegro_client_secret', 'shoper_url', 'shoper_api_key',
     'shop_email_to'];
   allowed.forEach(k => { if (k in data) db.settings[k] = data[k]; });
   saveDB();
+  // Po zapisaniu klucza chmury od razu wypchnij wszystkie zlecenia,
+  // żeby stare linki "Śledź naprawę" też zaczęły działać
+  if (cloudSyncEnabled()) syncAllToCloud();
   return { success: true };
+});
+
+// ── Konta Gmail ────────────────────────────────────────────────────────
+// Aktywne konto jest kopiowane do pól smtp_* — cała reszta kodu
+// (wysyłka e-maili, testy SMTP) działa bez zmian.
+
+function aktywujKontoGmail(acc) {
+  db.settings.gmail_active_id = acc.id;
+  db.settings.smtp_user = acc.email;
+  db.settings.smtp_pass = acc.pass;
+  db.settings.smtp_host = acc.host || 'smtp.gmail.com';
+  db.settings.smtp_port = Number(acc.port) || 587;
+}
+
+ipcMain.handle('gmail:lista', () => (db.settings.gmail_accounts || []).map(a => ({
+  id: a.id, email: a.email, host: a.host, port: a.port, added_at: a.added_at,
+  active: a.id === db.settings.gmail_active_id,
+})));
+
+ipcMain.handle('gmail:dodaj', (_, data = {}) => {
+  const email = String(data.email || '').trim();
+  const pass  = String(data.pass  || '').trim();
+  if (!email || !pass) return { ok: false, error: 'Podaj adres e-mail i hasło aplikacji' };
+  if (!db.settings.gmail_accounts) db.settings.gmail_accounts = [];
+  if (db.settings.gmail_accounts.some(a => a.email === email))
+    return { ok: false, error: 'To konto już jest dodane' };
+  const acc = {
+    id: 'g' + Date.now(),
+    email, pass,
+    host: String(data.host || '').trim() || 'smtp.gmail.com',
+    port: Number(data.port) || 587,
+    added_at: new Date().toISOString(),
+  };
+  db.settings.gmail_accounts.push(acc);
+  if (db.settings.gmail_accounts.length === 1) aktywujKontoGmail(acc);
+  saveDB();
+  return { ok: true, id: acc.id };
+});
+
+ipcMain.handle('gmail:aktywuj', (_, id) => {
+  const acc = (db.settings.gmail_accounts || []).find(a => a.id === id);
+  if (!acc) return { ok: false, error: 'Nie znaleziono konta' };
+  aktywujKontoGmail(acc);
+  saveDB();
+  return { ok: true, email: acc.email };
+});
+
+ipcMain.handle('gmail:usun', (_, id) => {
+  db.settings.gmail_accounts = (db.settings.gmail_accounts || []).filter(a => a.id !== id);
+  if (db.settings.gmail_active_id === id) {
+    const next = db.settings.gmail_accounts[0];
+    if (next) {
+      aktywujKontoGmail(next);
+    } else {
+      db.settings.gmail_active_id = null;
+      db.settings.smtp_user = '';
+      db.settings.smtp_pass = '';
+    }
+  }
+  saveDB();
+  return { ok: true };
+});
+
+// ── Gmail — konta wbudowanej skrzynki (webview) ────────────────────────
+// Nie przechowujemy tu żadnych haseł — zalogowanie żyje w partycji sesji
+// Chromium (persist:gmailweb_<id>). Trzymamy tylko listę kont i etykiety.
+
+ipcMain.handle('gmailweb:lista', () => (db.settings.gmail_web_accounts || []).map(a => ({ ...a })));
+
+ipcMain.handle('gmailweb:dodaj', () => {
+  if (!db.settings.gmail_web_accounts) db.settings.gmail_web_accounts = [];
+  const acc = { id: 'gw' + Date.now(), label: '', added_at: new Date().toISOString() };
+  db.settings.gmail_web_accounts.push(acc);
+  saveDB();
+  return { ok: true, id: acc.id };
+});
+
+ipcMain.handle('gmailweb:aktualizuj', (_, data = {}) => {
+  const acc = (db.settings.gmail_web_accounts || []).find(a => a.id === data.id);
+  if (!acc) return { ok: false, error: 'Nie znaleziono konta' };
+  acc.label = String(data.label || '').slice(0, 120);
+  saveDB();
+  return { ok: true };
+});
+
+ipcMain.handle('gmailweb:usun', async (_, id) => {
+  db.settings.gmail_web_accounts = (db.settings.gmail_web_accounts || []).filter(a => a.id !== id);
+  saveDB();
+  // Wyczyść partycję sesji = pełne wylogowanie konta z aplikacji
+  if (/^gw\d+$/.test(String(id))) {
+    try { await session.fromPartition('persist:gmailweb_' + id).clearStorageData(); } catch (_) {}
+  }
+  return { ok: true };
 });
 
 // ── API Keys IPC ───────────────────────────────────────────────────────
@@ -1277,8 +1481,10 @@ body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSys
     </div>
     <div class="order-box">
       <div class="order-num">${zlecenie.numer}</div>
-      <div class="order-row"><span class="order-label">Sprzęt</span><span class="order-val">${sprzet}</span></div>
-      <div class="order-row"><span class="order-label">Status</span><span class="order-val" style="color:#16a34a">✅ Gotowe</span></div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">
+        ${emailRow('Sprzęt', sprzet)}
+        ${emailRow('Status', '✅ Gotowe', '#16a34a')}
+      </table>
     </div>
     <div class="btn-wrap"><a class="btn" href="${trackUrl}">Sprawdź szczegóły →</a></div>
     <div class="hint">Prosimy o odbiór w ciągu 14 dni</div>
