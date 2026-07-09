@@ -127,6 +127,17 @@
   <!-- TOAST -->
   <div id="toastBox"></div>
 
+  <!-- BANER AKTUALIZACJI -->
+  <div id="updateBanner" class="update-banner d-none">
+    <span style="font-size:1.3rem">🔄</span>
+    <div style="flex:1;min-width:0">
+      <div id="updateBannerText" style="font-weight:800;font-size:.88rem">Dostępna nowa wersja</div>
+      <div id="updateBannerSub" style="font-size:.75rem;color:var(--slate-400);margin-top:2px"></div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="updateBannerBtn" onclick="pobierzIZainstalujAktualizacje()">Pobierz i zainstaluj</button>
+    <button class="btn-close-modal" onclick="zamknijBanerAktualizacji()" title="Później">×</button>
+  </div>
+
   <!-- PHONE MODAL -->
   <div id="phoneModal" class="modal-overlay d-none" onclick="if(event.target===this)closePhoneModal()">
     <div class="modal-box">
@@ -355,6 +366,14 @@
         <div class="form-group">
           <label class="form-label">Klucz API</label>
           <input class="form-control" id="set-shoper-key" type="password" placeholder="Klucz API Shoper">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🔄 Aktualizacje aplikacji</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="font-size:.85rem;color:var(--slate-500)">Zainstalowana wersja: <strong id="set-app-version">—</strong></div>
+          <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="sprawdzAktualizacjeReczne(this)">🔄 Sprawdź aktualizacje</button>
         </div>
       </div>
 

@@ -628,6 +628,16 @@ select.form-control { cursor: pointer; }
 .toast-warning { background: #fef3c7; color: #92400e; }
 .toast-error   { background: var(--red-600); color: white; }
 
+/* ── Baner aktualizacji ──────────────────────────────────────────────── */
+.update-banner {
+  position: fixed; bottom: 24px; left: 24px; z-index: 280;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 2px solid var(--green-600);
+  border-radius: 14px; padding: 14px 16px; max-width: 480px;
+  box-shadow: var(--shadow);
+  animation: toastIn .25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 /* ── Util ────────────────────────────────────────────────────────────── */
 .d-none { display: none !important; }
 .mb-2 { margin-bottom: 8px; }

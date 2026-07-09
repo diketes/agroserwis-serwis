@@ -1019,6 +1019,58 @@ function odswiezGmailWeb() {
   else toast('Najpierw dodaj konto Gmail', 'warning');
 }
 
+// ── Aktualizacje aplikacji ─────────────────────────────────────────────
+
+let _updateInfo = null;
+
+if (window.api.update) {
+  window.api.update.onStatus(s => {
+    if (s.stan === 'dostepna') {
+      pokazBanerAktualizacji({ wersja: s.wersja, url: s.url, rozmiarMB: s.rozmiarMB });
+    } else if (s.stan === 'pobieranie') {
+      const el = document.getElementById('updateBannerSub');
+      if (el) el.textContent = `Pobieranie… ${s.procent}%`;
+    } else if (s.stan === 'instalowanie') {
+      const el = document.getElementById('updateBannerSub');
+      if (el) el.textContent = 'Uruchamianie instalatora — aplikacja zaraz się zamknie…';
+    }
+  });
+}
+
+function pokazBanerAktualizacji(info) {
+  _updateInfo = info;
+  document.getElementById('updateBannerText').textContent = `Dostępna nowa wersja ${info.wersja}`;
+  document.getElementById('updateBannerSub').textContent =
+    (info.rozmiarMB ? `${info.rozmiarMB} MB · ` : '') + 'Po pobraniu otworzy się instalator';
+  const btn = document.getElementById('updateBannerBtn');
+  btn.disabled = false; btn.textContent = 'Pobierz i zainstaluj';
+  document.getElementById('updateBanner').classList.remove('d-none');
+}
+
+function zamknijBanerAktualizacji() {
+  document.getElementById('updateBanner').classList.add('d-none');
+}
+
+async function pobierzIZainstalujAktualizacje() {
+  if (!_updateInfo || !_updateInfo.url) return;
+  const btn = document.getElementById('updateBannerBtn');
+  btn.disabled = true; btn.textContent = '⏳ Pobieranie…';
+  const r = await window.api.update.pobierzInstaluj(_updateInfo.url);
+  if (r && !r.ok) {
+    toast('Błąd aktualizacji: ' + r.error, 'error');
+    btn.disabled = false; btn.textContent = 'Pobierz i zainstaluj';
+  }
+}
+
+async function sprawdzAktualizacjeReczne(btn) {
+  btn.disabled = true; btn.textContent = '⏳ Sprawdzanie…';
+  const r = await window.api.update.sprawdz().catch(e => ({ ok: false, error: String(e.message || e) }));
+  btn.disabled = false; btn.textContent = '🔄 Sprawdź aktualizacje';
+  if (!r.ok) { toast(r.error, 'error'); return; }
+  if (r.nowsza && r.url) pokazBanerAktualizacji({ wersja: r.najnowsza, url: r.url, rozmiarMB: r.rozmiarMB });
+  else toast(`Masz najnowszą wersję (${r.aktualna})`);
+}
+
 // ── Photos ─────────────────────────────────────────────────────────────
 
 async function renderZdjecia(zlecenieId) {
@@ -1516,6 +1568,12 @@ async function sklepWyslijEmail() {
 
 async function openSettings() {
   const s = await window.api.settings.pobierz();
+  if (window.api.update) {
+    window.api.update.wersja().then(v => {
+      const el = document.getElementById('set-app-version');
+      if (el) el.textContent = v;
+    }).catch(() => {});
+  }
   document.getElementById('set-smtp-user').value  = s.smtp_user  || '';
   document.getElementById('set-smtp-pass').value  = s.smtp_pass  || '';
   document.getElementById('set-smtp-host').value  = s.smtp_host  || 'smtp.gmail.com';

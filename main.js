@@ -207,6 +207,92 @@ function syncZlecenieByIdToCloud(zlecenieId) {
   if (z) syncZlecenieToCloud(z);
 }
 
+// ── Aktualizacje aplikacji (GitHub Releases) ──────────────────────────
+// Bez electron-updater — własny, lekki mechanizm: sprawdź najnowszy release
+// na GitHubie, porównaj wersje, pobierz instalator do TEMP i uruchom go.
+// Wymaga PUBLICZNEGO repo (API i pliki release'ów bez logowania).
+
+const UPDATE_REPO = 'diketes/agroserwis-serwis';
+
+function isNewerVersion(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
+function sendUpdateStatus(s) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:status', s);
+}
+
+async function sprawdzNowaWersje() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+      headers: { 'User-Agent': 'agroserwis-serwis', 'Accept': 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (r.status === 404) return { ok: false, error: 'Nie znaleziono wydań — repo jest prywatne albo release jeszcze się nie opublikował' };
+    if (!r.ok) return { ok: false, error: 'GitHub odpowiedział błędem ' + r.status };
+    const rel = await r.json();
+    const najnowsza = String(rel.tag_name || '').replace(/^v/, '');
+    const setup = (rel.assets || []).find(a => /setup.*\.exe$/i.test(a.name))
+               || (rel.assets || []).find(a => /\.exe$/i.test(a.name));
+    return {
+      ok: true,
+      aktualna: app.getVersion(),
+      najnowsza,
+      nowsza: isNewerVersion(najnowsza, app.getVersion()),
+      url: setup ? setup.browser_download_url : null,
+      rozmiarMB: setup ? Math.round(setup.size / 1048576) : 0,
+    };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+ipcMain.handle('update:wersja', () => app.getVersion());
+
+ipcMain.handle('update:sprawdz', () => sprawdzNowaWersje());
+
+ipcMain.handle('update:pobierz-instaluj', async (_, url) => {
+  if (!url || !/^https:\/\/(github\.com|objects\.githubusercontent\.com)\//.test(url)) {
+    return { ok: false, error: 'Nieprawidłowy adres aktualizacji' };
+  }
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'agroserwis-serwis' } });
+    if (!res.ok) return { ok: false, error: 'Pobieranie nieudane: HTTP ' + res.status };
+    const total = Number(res.headers.get('content-length')) || 0;
+    const dest = path.join(app.getPath('temp'), 'AgroserwisSetup-' + Date.now() + '.exe');
+    const { Readable } = require('stream');
+    await new Promise((resolve, reject) => {
+      const rs = Readable.fromWeb(res.body);
+      const ws = fs.createWriteStream(dest);
+      let got = 0, lastPct = -1;
+      rs.on('data', chunk => {
+        got += chunk.length;
+        if (total) {
+          const pct = Math.round(got / total * 100);
+          if (pct !== lastPct) { lastPct = pct; sendUpdateStatus({ stan: 'pobieranie', procent: pct }); }
+        }
+      });
+      rs.on('error', reject);
+      ws.on('error', reject);
+      ws.on('finish', resolve);
+      rs.pipe(ws);
+    });
+    sendUpdateStatus({ stan: 'instalowanie' });
+    const { spawn } = require('child_process');
+    spawn(dest, [], { detached: true, stdio: 'ignore' }).unref();
+    setTimeout(() => app.quit(), 800);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
 // Wiersz "etykieta — wartość" w e-mailach. Gmail nie obsługuje display:flex
 // w wiadomościach — jedyny niezawodny układ to tabela ze stylami inline.
 function emailRow(label, value, valColor = '#1e293b') {
@@ -963,6 +1049,15 @@ app.whenReady().then(() => {
   });
   // Dosync wszystkich zleceń do Railway po starcie (w tle, po 4 s)
   setTimeout(() => syncAllToCloud(), 4000);
+  // Auto-sprawdzenie aktualizacji 20 s po starcie (tylko zainstalowana wersja)
+  if (app.isPackaged) {
+    setTimeout(async () => {
+      const r = await sprawdzNowaWersje();
+      if (r.ok && r.nowsza && r.url) {
+        sendUpdateStatus({ stan: 'dostepna', wersja: r.najnowsza, url: r.url, rozmiarMB: r.rozmiarMB });
+      }
+    }, 20000);
+  }
   startHttpServer();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

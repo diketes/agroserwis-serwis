@@ -55,6 +55,12 @@ contextBridge.exposeInMainWorld('api', {
     aktualizuj: (data) => ipcRenderer.invoke('gmailweb:aktualizuj', data),
     usun:       (id)   => ipcRenderer.invoke('gmailweb:usun', id),
   },
+  update: {
+    wersja:         ()    => ipcRenderer.invoke('update:wersja'),
+    sprawdz:        ()    => ipcRenderer.invoke('update:sprawdz'),
+    pobierzInstaluj:(url) => ipcRenderer.invoke('update:pobierz-instaluj', url),
+    onStatus:       (cb)  => ipcRenderer.on('update:status', (_, s) => cb(s)),
+  },
   email: {
     wyslij: (id) => ipcRenderer.invoke('email:wyslij', id),
     test:   ()   => ipcRenderer.invoke('email:test'),
