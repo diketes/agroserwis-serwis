@@ -1,0 +1,48 @@
+name: Release (Windows)
+
+# Wypchnięcie tagu v* buduje instalator Windows i dołącza go do Release.
+# Assety Release nie zużywają limitu miejsca na artefakty Actions,
+# więc ten workflow nie wpadnie w problem ze storage jak stare buildy.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer + portable
+        run: npx electron-builder --win --x64
+
+      - name: Publish release with installers
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Agroserwis Serwis ${{ github.ref_name }}
+          files: |
+            dist/*Setup*.exe
+            dist/*portable*.exe
+          body: |
+            ## Agroserwis Serwis — Windows
+
+            **Do pobrania:**
+            - `Agroserwis.Serwis.Setup.*.exe` — instalator (zalecany)
+            - `AgroserwisServis-portable.exe` — wersja przenośna, bez instalacji
+
+            **Nowości w 1.1.0:**
+            - 📧 **Gmail w aplikacji** — zaloguj się na swoje konta Google i przełączaj się między skrzynkami jednym kliknięciem
+            - 🌙 **Tryb ciemny** + odświeżony wygląd całej aplikacji
+            - ✉️ Poprawione e-maile do klientów (etykiety już się nie zlewają)
+            - ☁️ Synchronizacja zleceń z Railway — linki „Śledź naprawę" działają nawet przy wyłączonym komputerze (Ustawienia → Klucz synchronizacji chmury)
