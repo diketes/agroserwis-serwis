@@ -18,7 +18,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 24: electron-builder ciągnie zależność ESM-only (@noble/hashes),
+          # której Node 20 nie potrafi wczytać przez require() → build padał.
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
