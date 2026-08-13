@@ -24,8 +24,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Ponawiamy — electron-builder czasem nie dociągnie narzędzi z sieci przy 1. próbie
       - name: Build Windows installer + portable
-        run: npx electron-builder --win --x64
+        shell: pwsh
+        run: |
+          $ok = $false
+          for ($i = 1; $i -le 3; $i++) {
+            Write-Host "Build — próba $i/3"
+            npx electron-builder --win --x64
+            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+            Start-Sleep -Seconds 15
+          }
+          if (-not $ok) { throw "Build nie powiódł się po 3 próbach" }
 
       - name: Publish release with installers
         uses: softprops/action-gh-release@v2
@@ -41,8 +51,4 @@ jobs:
             - `Agroserwis.Serwis.Setup.*.exe` — instalator (zalecany)
             - `AgroserwisServis-portable.exe` — wersja przenośna, bez instalacji
 
-            **Nowości w 1.1.0:**
-            - 📧 **Gmail w aplikacji** — zaloguj się na swoje konta Google i przełączaj się między skrzynkami jednym kliknięciem
-            - 🌙 **Tryb ciemny** + odświeżony wygląd całej aplikacji
-            - ✉️ Poprawione e-maile do klientów (etykiety już się nie zlewają)
-            - ☁️ Synchronizacja zleceń z Railway — linki „Śledź naprawę" działają nawet przy wyłączonym komputerze (Ustawienia → Klucz synchronizacji chmury)
+            Aktualizacja zaproponuje się sama po uruchomieniu aplikacji.

@@ -44,7 +44,8 @@ alter table zlecenia enable row level security;
 alter table zdjecia  enable row level security;
 -- celowo brak polityk RLS: anon nie ma dostępu, service_role omija RLS
 
--- Publiczny bucket na zdjęcia (odczyt po URL; zapis tylko service_role)
+-- PRYWATNY bucket na zdjęcia — zdjęcia sprzętu klientów (RODO) nie mogą być
+-- publiczne; czyta je tylko desktop kluczem service_role, zapisuje funkcja.
 insert into storage.buckets (id, name, public)
-values ('zdjecia', 'zdjecia', true)
-on conflict (id) do nothing;
+values ('zdjecia', 'zdjecia', false)
+on conflict (id) do update set public = false;

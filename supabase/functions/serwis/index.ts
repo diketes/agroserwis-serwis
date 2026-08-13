@@ -114,6 +114,8 @@ Deno.serve(async (req) => {
   if (mFoto && req.method === "GET") {
     const { data: z } = await sb.from("zlecenia").select("numer,klient_nazwa,marka,model").eq("token", mFoto[1]).maybeSingle();
     if (!z) return html("Nie znaleziono zlecenia", 404);
+    // minimalizacja danych — na stronie zdjęć tylko imię, nie pełne nazwisko
+    z.klient_nazwa = String(z.klient_nazwa || "").split(" ")[0];
     return html(stronaFoto(baza, mFoto[1], z));
   }
 
@@ -122,11 +124,22 @@ Deno.serve(async (req) => {
     const token = mFotoApi[1];
     const { data: z } = await sb.from("zlecenia").select("token").eq("token", token).maybeSingle();
     if (!z) return json({ error: "Nie znaleziono zlecenia" }, 404);
+    // limit liczby zdjęć na zlecenie — bez tego można zapchać Storage
+    const { count } = await sb.from("zdjecia").select("id", { count: "exact", head: true }).eq("token", token);
+    if ((count ?? 0) >= 30) return json({ error: "Osiągnięto limit zdjęć dla zlecenia" }, 429);
     const body = await req.json().catch(() => ({}));
     if (!body.typ || !body.data) return json({ error: "Brak danych" }, 400);
     const typ = body.typ === "po" ? "po" : "przed";
     const base64 = String(body.data).replace(/^data:image\/\w+;base64,/, "");
-    const bajty = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    // limit rozmiaru ~6 MB (base64 jest ~1.33× większy niż bajty)
+    if (base64.length > 8_000_000) return json({ error: "Zdjęcie za duże (max ~6 MB)" }, 413);
+    let bajty: Uint8Array;
+    try { bajty = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)); }
+    catch { return json({ error: "Nieprawidłowe dane zdjęcia" }, 400); }
+    // magic bytes JPEG (FF D8 FF) — nie pozwalamy hostować dowolnych plików
+    if (bajty.length < 3 || bajty[0] !== 0xFF || bajty[1] !== 0xD8 || bajty[2] !== 0xFF) {
+      return json({ error: "Plik nie jest zdjęciem JPEG" }, 400);
+    }
     const path = `${token}/${typ}_${Date.now()}.jpg`;
     const { error: e1 } = await sb.storage.from("zdjecia").upload(path, bajty, { contentType: "image/jpeg" });
     if (e1) return json({ error: "Błąd zapisu zdjęcia" }, 500);
@@ -163,14 +176,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
 <script>
 const KOLORY = {'Przyjęto':['#dbeafe','#1d4ed8'],'W naprawie':['#fef3c7','#854d0e'],'Czeka na części':['#ffedd5','#9a3412'],'Gotowe':['#dcfce7','#15803d'],'Wydano':['#e2e8f0','#475569']};
 const d = s => s ? new Date(s).toLocaleDateString('pl-PL') : '—';
+// escapowanie — dane zlecenia mogą pochodzić z publicznego formularza reklamacji
+const e = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 fetch('${baza}/api/sledz/${token}').then(r => { if(!r.ok) throw 0; return r.json(); }).then(z => {
   const k = KOLORY[z.status] || KOLORY['Przyjęto'];
   document.getElementById('tresc').innerHTML =
-    '<div class="numer">' + z.numer + '</div>' +
-    '<div class="status" style="background:' + k[0] + ';color:' + k[1] + '">' + z.status + '</div>' +
-    (z.klient_imie ? '<div class="wiersz"><span>Klient</span><span>' + z.klient_imie + '</span></div>' : '') +
-    '<div class="wiersz"><span>Sprzęt</span><span>' + ([z.marka, z.model].filter(Boolean).join(' ') || '—') + '</span></div>' +
-    (z.nr_seryjny ? '<div class="wiersz"><span>Nr seryjny</span><span>' + z.nr_seryjny + '</span></div>' : '') +
+    '<div class="numer">' + e(z.numer) + '</div>' +
+    '<div class="status" style="background:' + k[0] + ';color:' + k[1] + '">' + e(z.status) + '</div>' +
+    (z.klient_imie ? '<div class="wiersz"><span>Klient</span><span>' + e(z.klient_imie) + '</span></div>' : '') +
+    '<div class="wiersz"><span>Sprzęt</span><span>' + (e([z.marka, z.model].filter(Boolean).join(' ')) || '—') + '</span></div>' +
+    (z.nr_seryjny ? '<div class="wiersz"><span>Nr seryjny</span><span>' + e(z.nr_seryjny) + '</span></div>' : '') +
     '<div class="wiersz"><span>Przyjęto</span><span>' + d(z.data_przyjecia) + '</span></div>' +
     '<div class="wiersz"><span>Gotowe</span><span>' + d(z.data_gotowosci) + '</span></div>' +
     '<div class="wiersz"><span>Wydano</span><span>' + d(z.data_wydania) + '</span></div>' +

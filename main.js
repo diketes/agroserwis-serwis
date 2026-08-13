@@ -123,7 +123,26 @@ function validateApiKey(req) {
   const xkey = req.headers['x-api-key'] || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : xkey.trim();
   if (!token) return false;
-  return (db.settings.api_keys || []).some(k => k.key === token);
+  // porównanie stałoczasowe — bez kanału bocznego przez czas
+  const buf = Buffer.from(token);
+  return (db.settings.api_keys || []).some(k => {
+    const kb = Buffer.from(k.key || '');
+    return kb.length === buf.length && crypto.timingSafeEqual(kb, buf);
+  });
+}
+
+// Czy żądanie przyszło przez proxy/tunel (Cloudflare) zamiast z LAN/localhost.
+// Wewnętrzne API ma być dostępne tylko w sieci warsztatu, nie z internetu.
+function czyPrzezProxy(req) {
+  const h = (req && req.headers) || {};
+  return !!(h['x-forwarded-for'] || h['x-forwarded-host'] || h['cf-connecting-ip'] || h['cf-ray']);
+}
+
+// Escapowanie do HTML (strony generowane po stronie serwera)
+function escH(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 let mainWindow;
@@ -393,7 +412,11 @@ async function pobierzZChmury() {
         const z = db.zlecenia.find(x => x.token === f.token);
         if (z) {
           try {
-            const res = await fetch(`${supabaseBase()}/storage/v1/object/public/zdjecia/${f.path}`, { signal: AbortSignal.timeout(20000) });
+            // bucket jest prywatny — pobieramy uwierzytelnionym endpointem (service_role)
+            const res = await fetch(`${supabaseBase()}/storage/v1/object/authenticated/zdjecia/${f.path}`, {
+              headers: { apikey: db.settings.supabase_key, Authorization: 'Bearer ' + db.settings.supabase_key },
+              signal: AbortSignal.timeout(20000),
+            });
             if (res.ok) {
               const buf = Buffer.from(await res.arrayBuffer());
               const typ = f.typ === 'po' ? 'po' : 'przed';
@@ -468,9 +491,13 @@ ipcMain.handle('update:wersja', () => app.getVersion());
 
 ipcMain.handle('update:sprawdz', () => sprawdzNowaWersje());
 
-ipcMain.handle('update:pobierz-instaluj', async (_, url) => {
-  if (!url || !/^https:\/\/(github\.com|objects\.githubusercontent\.com)\//.test(url)) {
-    return { ok: false, error: 'Nieprawidłowy adres aktualizacji' };
+ipcMain.handle('update:pobierz-instaluj', async () => {
+  // NIE ufamy adresowi z okna — sami pobieramy najnowsze wydanie z zaufanego
+  // repo, żeby nie dało się podstawić dowolnego .exe (ryzyko zdalnego kodu).
+  const info = await sprawdzNowaWersje();
+  const url = info && info.ok ? info.url : null;
+  if (!url || !/^https:\/\/(github\.com|objects\.githubusercontent\.com)\/diketes\/agroserwis-serwis\//.test(url)) {
+    return { ok: false, error: 'Brak prawidłowego pliku aktualizacji w wydaniu' };
   }
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'agroserwis-serwis' } });
@@ -935,6 +962,17 @@ function getPublicBase(req) {
 
 async function handleApi(pathname, method, query, body, res, req) {
 
+  // ── Bramka tunelu: wewnętrzne API tylko z LAN/localhost, nigdy z internetu ──
+  // Publiczne (dla klientów przez tunel/chmurę) są tylko: reklamacja, śledzenie,
+  // zdjęcia po tokenie oraz ping. Cała reszta = dane i operacje warsztatu.
+  const publiczneTrasy = pathname === '/api/v1/ping'
+    || pathname === '/api/reklamacja'
+    || pathname.startsWith('/api/sledz/')
+    || pathname.startsWith('/api/foto/');
+  if (!publiczneTrasy && czyPrzezProxy(req)) {
+    return sendJson(res, { error: 'Dostęp tylko z sieci lokalnej warsztatu' }, 403);
+  }
+
   // ── API v1 (zewnętrzne REST API z auth) ─────────────────────────────
   if (pathname.startsWith('/api/v1/')) {
     if (pathname === '/api/v1/ping' && method === 'GET') {
@@ -1026,14 +1064,17 @@ async function handleApi(pathname, method, query, body, res, req) {
   // Tylko z tego komputera (desktop) — telefony w sieci nie mogą czytać/tworzyć kluczy
   if (pathname.startsWith('/api/api-keys')) {
     const ra = (req && req.socket && req.socket.remoteAddress) || '';
-    const isLocal = ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1';
+    // tunel łączy się z 127.0.0.1 → sam adres nie wystarcza, wyklucz proxy
+    const isLocal = !czyPrzezProxy(req) &&
+      (ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1');
     if (!isLocal) return sendJson(res, { error: 'Dostęp tylko lokalny' }, 403);
   }
   if (pathname === '/api/api-keys') {
     if (method === 'GET') {
+      // pełny klucz NIE leci przez HTTP — tylko podgląd prefiksu (pełny przez IPC desktopu)
       return sendJson(res, (db.settings.api_keys || []).map(k => ({
         label: k.label, created_at: k.created_at,
-        key_prefix: k.key.slice(0, 12) + '...', key: k.key,
+        key_prefix: k.key.slice(0, 12) + '...',
       })));
     }
     if (method === 'POST') {
@@ -1252,12 +1293,16 @@ async function handleApi(pathname, method, query, body, res, req) {
   }
   if (pathname === '/api/zdjecia' && method === 'POST') {
     if (!body.zlecenie_id || !body.typ || !body.data) return sendJson(res, { error: 'Brak danych' }, 400);
+    // Twarda walidacja — bez tego nazwa pliku pozwalała na path traversal (../)
+    const zId = parseInt(body.zlecenie_id);
+    if (!Number.isInteger(zId) || zId <= 0) return sendJson(res, { error: 'Złe zlecenie_id' }, 400);
+    const typ = body.typ === 'po' ? 'po' : 'przed';
     const id = db.nextId.zdjecia++;
     const ext = body.data.includes('image/png') ? '.png' : '.jpg';
-    const filename = `${body.zlecenie_id}_${body.typ}_${Date.now()}${ext}`;
+    const filename = `${zId}_${typ}_${Date.now()}${ext}`;
     const base64 = body.data.replace(/^data:image\/\w+;base64,/, '');
     fs.writeFileSync(path.join(photosDir, filename), Buffer.from(base64, 'base64'));
-    db.zdjecia.push({ id, zlecenie_id: parseInt(body.zlecenie_id), typ: body.typ, filename, data_dodania: new Date().toISOString() });
+    db.zdjecia.push({ id, zlecenie_id: zId, typ, filename, data_dodania: new Date().toISOString() });
     saveDB();
     return sendJson(res, { id, url: `/photos/${filename}` });
   }
@@ -1451,14 +1496,14 @@ body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#1e293b;paddin
 <div style="font-size:.9rem;font-weight:700;color:#334155;margin-bottom:12px">Karta śledzenia naprawy</div>
 <div class="card">
   <div class="card-label">Zeskanuj kod QR aby sprawdzić status naprawy:</div>
-  <img class="qr-img" src="${qrUrl}" width="200" height="200" alt="QR">
-  <div class="track-url">${trackUrl}</div>
+  <img class="qr-img" src="${escH(qrUrl)}" width="200" height="200" alt="QR">
+  <div class="track-url">${escH(trackUrl)}</div>
 </div>
 <div style="margin:14px 0">
-  <div class="info-row"><span class="info-label">Nr zlecenia</span><span class="numer">${z.numer}</span></div>
-  <div class="info-row"><span class="info-label">Sprzęt</span><span class="info-val">${sprzet}</span></div>
-  <div class="info-row"><span class="info-label">Data przyjęcia</span><span class="info-val">${dateStr}</span></div>
-  ${z.nr_seryjny ? `<div class="info-row"><span class="info-label">Nr seryjny</span><span class="info-val">${z.nr_seryjny}</span></div>` : ''}
+  <div class="info-row"><span class="info-label">Nr zlecenia</span><span class="numer">${escH(z.numer)}</span></div>
+  <div class="info-row"><span class="info-label">Sprzęt</span><span class="info-val">${escH(sprzet)}</span></div>
+  <div class="info-row"><span class="info-label">Data przyjęcia</span><span class="info-val">${escH(dateStr)}</span></div>
+  ${z.nr_seryjny ? `<div class="info-row"><span class="info-label">Nr seryjny</span><span class="info-val">${escH(z.nr_seryjny)}</span></div>` : ''}
 </div>
 <div class="footer">
   Strona odświeża się automatycznie co minutę.<br>
@@ -1542,6 +1587,33 @@ function createWindow() {
     cb(permission === 'media');
   });
 }
+
+// ── Hardening webview/nawigacji (bezpieczeństwo) ───────────────────────
+// Dotyczy okna głównego i osadzonych webview (Gmail, WhatsApp).
+const WEBVIEW_DOZWOLONE = ['mail.google.com', 'accounts.google.com', 'accounts.googleusercontent.com',
+  'web.whatsapp.com', 'www.whatsapp.com', 'whatsapp.com', 'web.whatsapp.com.'];
+function hostDozwolonyWebview(u) {
+  try { return WEBVIEW_DOZWOLONE.includes(new URL(u).hostname); } catch { return false; }
+}
+app.on('web-contents-created', (_e, contents) => {
+  // 1) webview nie może dostać własnego preloada ani Node — i tylko dozwolone hosty
+  contents.on('will-attach-webview', (_ev, webPreferences, params) => {
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    if (!hostDozwolonyWebview(params.src)) params.src = 'about:blank';
+  });
+  // 2) nowe okna: linki (np. z Gmaila) otwieramy w przeglądarce systemowej, nie w apce
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  // 3) blokuj przenawigowanie głównego okna/webview poza dozwolone miejsca
+  contents.on('will-navigate', (ev, url) => {
+    const okno = url.startsWith('file://');
+    if (!okno && !hostDozwolonyWebview(url)) { ev.preventDefault(); }
+  });
+});
 
 app.whenReady().then(() => {
   dbPath    = path.join(app.getPath('userData'), 'serwis-data.json');
@@ -2545,7 +2617,8 @@ ipcMain.handle('allegro:connect', async () => {
 
   allegroDeviceCode = res.body.device_code;
   const verifyUrl = res.body.verification_uri_complete || res.body.verification_uri;
-  shell.openExternal(verifyUrl);
+  // otwieramy tylko https (nigdy file://, smb:// itp. z odpowiedzi API)
+  if (/^https:\/\//i.test(verifyUrl || '')) shell.openExternal(verifyUrl);
 
   const interval = (res.body.interval || 5) * 1000;
   let tries = 0;

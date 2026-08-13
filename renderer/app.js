@@ -47,6 +47,14 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// Bezpieczne wstawienie wartości do stringa JS wewnątrz atrybutu onclick="fn('...')".
+// Samo esc() nie wystarcza: przeglądarka odkodowuje encje ZANIM handler trafi do JS,
+// więc trzeba najpierw uciec znaki JS (\ i '), a potem dopiero zescapować HTML.
+function jsStr(s) {
+  return esc(String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, '\\n'));
+}
 function initials(name) {
   return (name || '').split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
@@ -453,7 +461,7 @@ async function loadOrders() {
     const m = getMechanik(z.mechanik_id);
     return `<div class="order-row" onclick="openZlecenie(${z.id})">
       <div class="order-numer">${esc(z.numer)}</div>
-      <div class="order-client">${esc(z.klient_nazwa)}${z.klient_telefon ? `<button class="wa-mini" onclick="event.stopPropagation();otworzWhatsAppKlienta('${esc(z.klient_telefon)}')" title="Napisz do klienta na WhatsApp">💬</button>` : ''}</div>
+      <div class="order-client">${esc(z.klient_nazwa)}${z.klient_telefon ? `<button class="wa-mini" onclick="event.stopPropagation();otworzWhatsAppKlienta('${jsStr(z.klient_telefon)}')" title="Napisz do klienta na WhatsApp">💬</button>` : ''}</div>
       <div class="order-device">${esc([z.marka, z.model].filter(Boolean).join(' ') || '—')}</div>
       <div>${badge(z.status)}</div>
       <div>${m
@@ -511,7 +519,7 @@ async function renderSzczegoly(id) {
         ${mechanik ? `<span class="mech-badge" style="background:${mechanik.kolor};width:auto;border-radius:100px;padding:0 10px;font-size:.75rem" title="${esc(mechanik.nazwa)}">${esc(mechanik.nazwa)}</span>` : ''}
         <div style="margin-left:auto;display:flex;gap:8px">
           ${!data.mechanik_id ? `<button class="btn btn-primary btn-sm" onclick="przejmijZlecenie(${id}, true)" title="Przypisz to zlecenie do siebie">✋ Weź na siebie</button>` : ''}
-          <button class="btn btn-outline btn-sm" onclick="otworzWhatsAppKlienta('${esc(data.klient_telefon || '')}')" title="Otwórz rozmowę WhatsApp z klientem" style="color:#16a34a;border-color:#16a34a">💬 WhatsApp</button>
+          <button class="btn btn-outline btn-sm" onclick="otworzWhatsAppKlienta('${jsStr(data.klient_telefon || '')}')" title="Otwórz rozmowę WhatsApp z klientem" style="color:#16a34a;border-color:#16a34a">💬 WhatsApp</button>
           <button class="btn btn-outline btn-sm" id="emailBtn" onclick="wyślijEmailKlienta(${id},this.dataset.email)" data-email="${esc(data.klient_email || '')}">📧 E-mail</button>
           <button class="btn btn-outline btn-sm" onclick="window.api.etykieta.drukuj(${id})">🏷 Etykieta</button>
           <button class="btn btn-outline btn-sm" onclick="printZlecenie('${data.numer}')">🖨 Drukuj PDF</button>
@@ -1153,7 +1161,7 @@ async function renderKontaNadawcze() {
         ? `<span class="gmail-active-badge">✓ Aktywne</span>
            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();testGmail(this)">📧 Test</button>`
         : `<span class="gmail-switch-hint">Kliknij, aby przełączyć →</span>`}
-      <button class="btn-icon-sm btn-danger-icon" title="Usuń konto" onclick="event.stopPropagation();usunGmail('${k.id}','${esc(k.email)}')">🗑</button>
+      <button class="btn-icon-sm btn-danger-icon" title="Usuń konto" onclick="event.stopPropagation();usunGmail('${jsStr(k.id)}','${jsStr(k.email)}')">🗑</button>
     </div>`).join('')
     : `<div class="empty-state"><div class="empty-icon">📭</div><div>Brak kont — dodaj pierwsze konto Gmail obok</div></div>`;
 
@@ -2565,11 +2573,11 @@ function drukujRaport() {
   const fmtD   = iso => iso ? new Date(iso).toLocaleDateString('pl-PL') : '—';
 
   const mechRows = d.mechStats.map(m =>
-    `<tr><td>${m.nazwa}</td><td style="text-align:center">${m.count}</td><td style="text-align:right">${fmtPln(m.revenue)}</td></tr>`
+    `<tr><td>${esc(m.nazwa)}</td><td style="text-align:center">${m.count}</td><td style="text-align:right">${fmtPln(m.revenue)}</td></tr>`
   ).join('');
 
   const orderRows = d.orders.map(o =>
-    `<tr><td style="font-family:monospace">${o.numer}</td><td>${o.klient||'—'}</td><td>${o.sprzet||'—'}</td><td>${o.status}</td><td style="text-align:right">${fmtPln(o.total)}</td></tr>`
+    `<tr><td style="font-family:monospace">${esc(o.numer)}</td><td>${esc(o.klient||'—')}</td><td>${esc(o.sprzet||'—')}</td><td>${esc(o.status)}</td><td style="text-align:right">${fmtPln(o.total)}</td></tr>`
   ).join('');
 
   const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Raport ${MIESIACE[d.miesiac]} ${d.rok}</title>
