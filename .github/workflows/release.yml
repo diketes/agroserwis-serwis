@@ -26,25 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # --publish never: sam build NIE publikuje (inaczej electron-builder żąda
+      # GH_TOKEN i pada); publikacją zajmuje się osobny krok poniżej.
       - name: Build Windows installer + portable
-        shell: pwsh
-        run: |
-          $env:DEBUG = "electron-builder"
-          npx electron-builder --win --x64 *>&1 | Tee-Object -FilePath build.log
-          exit $LASTEXITCODE
-
-      # Diagnostyka: przy błędzie wypchnij log builda na osobną gałąź do odczytu
-      - name: Log przy błędzie
-        if: failure()
-        shell: pwsh
-        run: |
-          git config user.name "ci"
-          git config user.email "ci@agroserwis"
-          $b = "cilog-${{ github.run_id }}"
-          git checkout -b $b
-          git add -f build.log
-          git commit -m "log builda ${{ github.run_id }}"
-          git push origin $b
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Publish release with installers
         uses: softprops/action-gh-release@v2
