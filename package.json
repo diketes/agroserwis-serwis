@@ -1,7 +1,7 @@
 {
   "name": "agroserwis-serwis",
-  "version": "1.2.0",
-  "description": "System zleceń serwisowych — Agroserwis Nysa",
+  "version": "1.2.1",
+  "description": "System zleceĹ„ serwisowych â€” Agroserwis Nysa",
   "main": "main.js",
   "author": "Agroserwis Nysa",
   "scripts": {
@@ -24,7 +24,7 @@
   "build": {
     "appId": "pl.agroserwisnysa.serwis",
     "productName": "Agroserwis Serwis",
-    "copyright": "© 2026 Agroserwis Nysa",
+    "copyright": "Â© 2026 Agroserwis Nysa",
     "directories": {
       "output": "dist"
     },

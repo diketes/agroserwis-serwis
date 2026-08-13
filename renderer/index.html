@@ -51,6 +51,19 @@
           Sklep
           <span id="sklepBadge" style="display:none;position:absolute;top:4px;right:4px;background:#ef4444;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:800;line-height:16px;text-align:center"></span>
         </button>
+        <button class="nav-tab" id="nav-statystyki" onclick="navigate('statystyki')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 11H2v3h2v-3zm5-4H7v7h2V7zm5-5v12h-2V2h2zm-2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1h-2zm-6 3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4zm-5 6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-4z"/>
+          </svg>
+          Statystyki
+        </button>
+        <button class="nav-tab" id="nav-whatsapp" onclick="navigate('whatsapp')" style="position:relative">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
+          </svg>
+          WhatsApp
+          <span id="waBadge" style="display:none;position:absolute;top:4px;right:4px;background:#ef4444;color:white;border-radius:50%;min-width:16px;height:16px;padding:0 3px;font-size:10px;font-weight:800;line-height:16px;text-align:center"></span>
+        </button>
         <button class="nav-tab" id="nav-gmail" onclick="navigate('gmail')">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4Zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2Zm13 2.383-4.708 2.825L15 11.105V5.383Zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741ZM1 11.105l4.708-2.897L1 5.383v5.722Z"/>
@@ -77,7 +90,7 @@
         <button class="btn-icon-hdr" id="themeBtn" onclick="toggleTheme()" title="Przełącz motyw jasny/ciemny">
           <span id="themeIcon" style="font-size:1rem;line-height:1">🌙</span>
         </button>
-        <button class="btn-icon-hdr" onclick="openSettings()" title="Ustawienia e-mail">
+        <button class="btn-icon-hdr" onclick="openSettings()" title="Ustawienia">
           <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor">
             <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
             <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.474l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
@@ -121,6 +134,17 @@
         </div>
       </div>
       <div class="gmail-smtp-wrap d-none" id="gmailSmtpWrap"></div>
+    </div>
+
+    <!-- WHATSAPP — wbudowany WhatsApp Web (trwały ekran, webview przeżywa nawigację) -->
+    <div id="whatsappScreen" class="gmail-screen d-none">
+      <div class="gmail-bar">
+        <div style="font-size:.83rem;color:var(--slate-500)">💬 Firmowy WhatsApp — zaloguj się raz: telefon → WhatsApp → Połączone urządzenia → zeskanuj kod QR</div>
+        <div class="gmail-bar-actions">
+          <button class="btn btn-outline btn-sm" onclick="odswiezWhatsApp()" title="Odśwież WhatsApp">↺</button>
+        </div>
+      </div>
+      <div class="gmail-web-wrap" id="waWrap"></div>
     </div>
   </div>
 
@@ -213,13 +237,24 @@
 
   <!-- SETTINGS MODAL -->
   <div id="settingsModal" class="modal-overlay d-none" onclick="if(event.target===this)closeSettings()">
-    <div class="modal-box" style="max-width:480px">
+    <div class="modal-box" style="max-width:560px">
       <div class="modal-header">
-        <div class="modal-title">⚙ Ustawienia e-mail</div>
+        <div class="modal-title">⚙ Ustawienia</div>
         <button class="btn-close-modal" onclick="closeSettings()">×</button>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-tabs">
+        <button class="settings-tab active" onclick="switchSettingsTab('email', this)">📧 E-mail</button>
+        <button class="settings-tab" onclick="switchSettingsTab('chmura', this)">☁️ Chmura</button>
+        <button class="settings-tab" onclick="switchSettingsTab('apilo', this)">📮 Apilo</button>
+        <button class="settings-tab" onclick="switchSettingsTab('allegro', this)">🛒 Allegro</button>
+        <button class="settings-tab" onclick="switchSettingsTab('shoper', this)">🏪 Shoper</button>
+        <button class="settings-tab" onclick="switchSettingsTab('api', this)">🔑 Klucze API</button>
+        <button class="settings-tab" onclick="switchSettingsTab('sklep', this)">📦 Sklep</button>
+        <button class="settings-tab" onclick="switchSettingsTab('update', this)">🔄 Aktualizacje</button>
+      </div>
+
+      <div class="settings-section settings-tab-panel" id="stab-email">
         <div class="settings-section-title">Konto SMTP (wysyłka e-maili)</div>
         <div class="settings-hint">
           Dla Gmail: włącz weryfikację dwuetapową, wejdź w
@@ -247,27 +282,41 @@
         </div>
       </div>
 
-      <div class="settings-section">
-        <div class="settings-section-title">Adres Railway (aplikacja na telefon)</div>
+      <div class="settings-section settings-tab-panel d-none" id="stab-chmura">
+        <div class="settings-section-title">☁️ Supabase (stały serwer)</div>
         <div class="settings-hint">
-          Wpisz adres Railway żeby aplikacja na telefon działała <strong>bez komputera i bez WiFi</strong>. Np. <code>https://agroserwis-serwis-production.up.railway.app</code> — znajdziesz go w panelu railway.app po wdrożeniu.
+          Stały serwer w chmurze: śledzenie napraw, formularz reklamacji ze strony WWW i zdjęcia z telefonów
+          działają <strong>zawsze</strong> — nawet przy wyłączonym komputerze. Dane z panelu supabase.com:
+          <strong>Project Settings → API</strong> (adres projektu i klucz <code>service_role</code>).
+        </div>
+        <div id="supabaseStatusBar" style="display:none;align-items:center;gap:8px;margin-bottom:10px;font-size:.82rem;padding:8px 12px;border-radius:8px;background:#dcfce7;color:#15803d">
+          <span>✅</span><span id="supabaseStatusText">Połączono</span>
         </div>
         <div class="form-group">
-          <label class="form-label">Adres Railway</label>
-          <input class="form-control" id="set-public-url" placeholder="https://twoj-projekt.up.railway.app">
-        </div>
-        <div class="settings-hint">
-          <strong>Klucz synchronizacji:</strong> z nim aplikacja automatycznie wysyła zlecenia do Railway,
-          dzięki czemu link „Śledź naprawę" w e-mailach działa nawet przy wyłączonym komputerze.
-          Wklej klucz API z chmury (<code>agro_...</code>) albo wartość zmiennej <code>ADMIN_KEY</code> z panelu Railway.
+          <label class="form-label">Adres projektu Supabase</label>
+          <input class="form-control" id="set-supabase-url" placeholder="https://xxxxx.supabase.co">
         </div>
         <div class="form-group">
-          <label class="form-label">Klucz synchronizacji chmury</label>
-          <input class="form-control" id="set-cloud-key" type="password" placeholder="agro_... lub ADMIN_KEY">
+          <label class="form-label">Klucz service_role</label>
+          <input class="form-control" id="set-supabase-key" type="password" placeholder="eyJhbGciOi...">
+        </div>
+        <button class="btn btn-outline btn-sm" id="supabaseTestBtn" onclick="testujSupabase()">🔗 Testuj połączenie</button>
+        <div class="settings-hint" style="margin-top:12px">
+          Gdy Supabase jest ustawiony, <strong>adres publiczny ustawia się sam</strong> — pola niżej zwykle zostaw puste.
+        </div>
+        <div class="settings-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Adres publiczny (automatyczny)</label>
+            <input class="form-control" id="set-public-url" placeholder="ustawi się sam z Supabase">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Klucz sync (stare Railway)</label>
+            <input class="form-control" id="set-cloud-key" type="password" placeholder="—">
+          </div>
         </div>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section settings-tab-panel d-none" id="stab-apilo">
         <div class="settings-section-title">Integracja Apilo</div>
         <div class="settings-hint">
           Pozwala importować dane klienta z zamówień Allegro/marketplace podczas przyjmowania reklamacji.
@@ -303,7 +352,7 @@
         </div>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section settings-tab-panel d-none" id="stab-api">
         <div class="settings-section-title">🔑 Klucze API (własne API)</div>
         <div class="settings-hint">
           Zewnętrzne systemy mogą tworzyć i pobierać zlecenia przez REST API.
@@ -320,7 +369,7 @@
         </div>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section settings-tab-panel d-none" id="stab-sklep">
         <div class="settings-section-title">📦 Sklep — zamówienia części</div>
         <div class="settings-hint">
           Adres email dostawcy/sklepu, na który mechanicy będą wysyłać zamówienia brakujących części jednym kliknięciem.
@@ -331,7 +380,7 @@
         </div>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section settings-tab-panel d-none" id="stab-allegro">
         <div class="settings-section-title">🛒 Allegro (integracja)</div>
         <div class="settings-hint">
           Client ID i Client Secret z panelu <strong>apps.developer.allegro.pl</strong>.
@@ -353,23 +402,34 @@
         <button class="btn btn-outline btn-sm" onclick="polaczAllegro()" id="allegroConnBtn">🔗 Połącz z Allegro</button>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section settings-tab-panel d-none" id="stab-shoper">
         <div class="settings-section-title">🏪 Shoper (integracja)</div>
         <div class="settings-hint">
-          URL sklepu i klucz API z panelu Shoper: <strong>Konfiguracja → API → Klucz dostępu</strong>.
-          Po skonfigurowaniu zamówienia ze sklepu trafią do systemu jako zlecenia serwisowe.
+          W panelu Shoper załóż konto administratora z dostępem do <strong>WebAPI</strong>
+          (Konfiguracja → Administracja, system → Administratorzy) i wpisz jego login oraz hasło.
+          Zamówienia ze sklepu zobaczysz w zakładce <strong>Sklep</strong> — jednym kliknięciem zrobisz z nich zlecenia.
+        </div>
+        <div id="shoperStatusBar" style="display:none;align-items:center;gap:8px;margin-bottom:10px;font-size:.82rem;padding:8px 12px;border-radius:8px;background:#dcfce7;color:#15803d">
+          <span>✅</span><span id="shoperStatusText">Połączono</span>
         </div>
         <div class="form-group">
           <label class="form-label">URL sklepu Shoper</label>
           <input class="form-control" id="set-shoper-url" placeholder="https://twojsklep.shoper.pl">
         </div>
-        <div class="form-group">
-          <label class="form-label">Klucz API</label>
-          <input class="form-control" id="set-shoper-key" type="password" placeholder="Klucz API Shoper">
+        <div class="settings-row">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Login API</label>
+            <input class="form-control" id="set-shoper-login" placeholder="Login użytkownika API">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Hasło API</label>
+            <input class="form-control" id="set-shoper-haslo" type="password" placeholder="Hasło użytkownika API">
+          </div>
         </div>
+        <button class="btn btn-outline btn-sm" id="shoperTestBtn" onclick="testujShoper()">🔗 Testuj połączenie</button>
       </div>
 
-      <div class="settings-section">
+      <div class="settings-section settings-tab-panel d-none" id="stab-update">
         <div class="settings-section-title">🔄 Aktualizacje aplikacji</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <div style="font-size:.85rem;color:var(--slate-500)">Zainstalowana wersja: <strong id="set-app-version">—</strong></div>
@@ -426,6 +486,17 @@
         <button class="btn btn-secondary" style="flex:1" onclick="closeRaport()">Zamknij</button>
         <button class="btn btn-primary" style="flex:1" id="raportPrintBtn" onclick="drukujRaport()" style="display:none">🖨 Drukuj PDF</button>
       </div>
+    </div>
+  </div>
+
+  <!-- FOTO QR MODAL — zdjęcia telefonem do zlecenia -->
+  <div id="fotoQrModal" class="modal-overlay d-none" onclick="if(event.target===this)zamknijFotoQr()">
+    <div class="modal-box" style="max-width:380px">
+      <div class="modal-header">
+        <div class="modal-title">📱 Zdjęcia telefonem</div>
+        <button class="btn-close-modal" onclick="zamknijFotoQr()">×</button>
+      </div>
+      <div id="fotoQrContent" style="text-align:center"></div>
     </div>
   </div>
 

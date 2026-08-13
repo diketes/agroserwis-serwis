@@ -190,6 +190,7 @@ let mechanicy = [];
 let selMechId = null;
 let filterStatus = 'Wszystkie';
 let filterMoje = false;
+let filterWolne = false; // pula nieprzypisanych zleceń
 let search = '';
 let stack = [];
 let currentMech = null; // zalogowany mechanik
@@ -348,15 +349,23 @@ async function renderLista() {
     const bMoje = document.createElement('button');
     bMoje.className = 'chip' + (filterMoje ? ' active' : '');
     bMoje.textContent = '👤 Moje';
-    bMoje.onclick = () => { filterMoje = !filterMoje; bMoje.classList.toggle('active', filterMoje); loadLista(); };
+    bMoje.onclick = () => { filterMoje = !filterMoje; if (filterMoje) { filterWolne = false; const w = document.getElementById('chipWolne'); if (w) w.classList.remove('active'); } bMoje.classList.toggle('active', filterMoje); loadLista(); };
     fs.appendChild(bMoje);
   }
+
+  const bWolne = document.createElement('button');
+  bWolne.id = 'chipWolne';
+  bWolne.className = 'chip' + (filterWolne ? ' active' : '');
+  bWolne.textContent = '🆓 Wolne';
+  bWolne.onclick = () => { filterWolne = !filterWolne; if (filterWolne) { filterMoje = false; fs.querySelector('.chip')?.classList.remove('active'); } bWolne.classList.toggle('active', filterWolne); loadLista(); };
+  fs.appendChild(bWolne);
 
   ['Wszystkie','Przyjęto','W naprawie','Czeka na części','Gotowe','Wydano'].forEach(s => {
     const b = document.createElement('button');
     b.className = 'chip'+(s===filterStatus?' active':'');
+    b.dataset.status = '1';
     b.textContent = s;
-    b.onclick = () => { filterStatus = s; fs.querySelectorAll('.chip:not(:first-child)').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadLista(); };
+    b.onclick = () => { filterStatus = s; fs.querySelectorAll('.chip[data-status]').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadLista(); };
     fs.appendChild(b);
   });
   loadLista();
@@ -367,20 +376,36 @@ async function loadLista() {
   if (filterStatus !== 'Wszystkie') p.set('status', filterStatus);
   if (search) p.set('szukaj', search);
   if (filterMoje && currentMech) p.set('mechanik_id', currentMech.id);
-  const data = await api('GET', `/api/zlecenia?${p}`);
+  let data = await api('GET', `/api/zlecenia?${p}`);
+  if (filterWolne) data = data.filter(z => !z.mechanik_id);
   const c = document.getElementById('li');
   if (!data.length) { c.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>Brak zleceń</div>`; return; }
   c.innerHTML = data.map(z => {
     const sp = [z.marka,z.model].filter(Boolean).join(' ')||'—';
     const mech = mechanicy.find(m => m.id === z.mechanik_id);
     const mechDot = mech ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${mech.kolor||'#16a34a'};margin-right:4px"></span>${mech.nazwa}` : '';
+    const wezBtn = (!z.mechanik_id && currentMech)
+      ? `<button style="background:#16a34a;color:#fff;border:none;border-radius:100px;padding:5px 12px;font-size:.75rem;font-weight:800" onclick="event.stopPropagation();wezZlecenie(${z.id})">✋ Weź</button>`
+      : '';
     return `<div class="card" onclick="nav('szczegoly',${z.id})">
-      <div class="card-top"><span class="card-numer">${z.numer}</span>${badge(z.status)}</div>
+      <div class="card-top"><span class="card-numer">${z.numer}</span><span style="display:flex;gap:6px;align-items:center">${wezBtn}${badge(z.status)}</span></div>
       <div class="card-klient">${z.klient_nazwa||'—'}</div>
       <div class="card-sprzet">${sp}${mechDot ? `<span style="margin-left:8px;font-size:.7rem;color:#94a3b8">${mechDot}</span>` : ''}</div>
       <div class="card-date">${fmt(z.data_przyjecia)}</div>
     </div>`;
   }).join('')+'<div style="height:14px"></div>';
+}
+
+// Przejęcie wolnego zlecenia na konto zalogowanego mechanika
+async function wezZlecenie(id) {
+  if (!currentMech) { toast('Zaloguj się jako mechanik'); return; }
+  try {
+    const r = await api('POST', `/api/zlecenia/${id}/przejmij`, { mechanik_id: currentMech.id });
+    toast(`✋ Zlecenie ${r.numer} jest Twoje!`);
+  } catch (e) {
+    toast(String(e.message) === '409' ? 'Za późno — ktoś już wziął to zlecenie' : 'Nie udało się przejąć zlecenia');
+  }
+  loadLista();
 }
 
 // ─── SZCZEGÓŁY ────────────────────────────────────────────────────────────────

@@ -69,12 +69,23 @@ function val(id) { const el = document.getElementById(id); return el ? el.value.
 function kolorPicker(containerId, current, onSelect) {
   const el = document.getElementById(containerId);
   if (!el) return;
+  const wlasny = current && !KOLORY.includes(current); // aktualny kolor spoza stałej listy
   el.innerHTML = KOLORY.map(c =>
     `<div class="kolor-dot${c === current ? ' selected' : ''}" style="background:${c}" data-kolor="${c}"></div>`
-  ).join('');
+  ).join('') + `
+    <label class="kolor-dot kolor-custom${wlasny ? ' selected' : ''}" title="Dowolny kolor — kliknij i wybierz z palety"${wlasny ? ` style="background:${current}"` : ''}>
+      <input type="color" value="${wlasny ? current : '#16a34a'}">
+    </label>`;
+  const custom = el.querySelector('.kolor-custom');
+  const inp = custom.querySelector('input');
+  inp.addEventListener('input', () => {
+    custom.style.background = inp.value;
+    el.querySelectorAll('.kolor-dot').forEach(d => d.classList.toggle('selected', d === custom));
+    onSelect(inp.value);
+  });
   el.onclick = e => {
     const dot = e.target.closest('.kolor-dot');
-    if (!dot) return;
+    if (!dot || dot === custom) return; // tęczowa kropka obsługiwana przez input[type=color]
     el.querySelectorAll('.kolor-dot').forEach(d => d.classList.toggle('selected', d === dot));
     onSelect(dot.dataset.kolor);
   };
@@ -83,8 +94,10 @@ function kolorPicker(containerId, current, onSelect) {
 function calcKoszty(data) {
   const czesci = data.czesci || [];
   const czTotal = czesci.reduce((s, c) => s + c.ilosc * c.cena_jednostkowa, 0);
+  const czZakup = czesci.reduce((s, c) => s + c.ilosc * (c.cena_zakupu || 0), 0);
   const rob = data.koszt_robocizny || 0;
-  return { czTotal, rob, total: czTotal + rob };
+  // czTotal/total = ceny dla klienta; czZakup/zysk = wewnętrzne dla warsztatu
+  return { czTotal, czZakup, rob, total: czTotal + rob, zysk: czTotal - czZakup + rob };
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────
@@ -174,25 +187,127 @@ async function goToPicker() {
   showScreen('pickerScreen');
 }
 
+// ── Słownik podpowiedzi (historia wpisów: marki, modele, części) ───────
+let _slownik = null;
+const MARKI_STARTOWE = ['STIHL', 'Husqvarna', 'Honda', 'Makita', 'Bosch', 'Kärcher',
+  'NAC', 'VENOM', 'Stiga', 'Oleo-Mac', 'Echo', 'Briggs & Stratton', 'Hecht', 'Grizzly', 'John Deere', 'TAIA'];
+
+async function zaladujSlownik() {
+  _slownik = await window.api.slownik.pobierz().catch(() => null);
+  return _slownik;
+}
+// Historia z bazy + popularne marki na start (bez duplikatów i bez ukrytych)
+function markiZHistoria() {
+  const hist   = (_slownik && _slownik.marki) || [];
+  const ukryte = new Set((_slownik && _slownik.ukryte && _slownik.ukryte.marki) || []);
+  const znane  = new Set(hist.map(m => m.toLowerCase()));
+  return hist.concat(MARKI_STARTOWE.filter(m => !znane.has(m.toLowerCase()) && !ukryte.has(m.toLowerCase())));
+}
+// Modele zawężone do wpisanej marki; bez marki (lub nieznanej) — wszystkie z historii
+function modeleDlaMarki(marka) {
+  if (!_slownik) return [];
+  const k = (marka || '').trim().toLowerCase();
+  return (k && _slownik.modele[k]) || _slownik.wszystkieModele || [];
+}
+
+// Własna lista podpowiedzi pod polem: filtruje przy pisaniu, klik = wybór,
+// ✕ = trwałe usunięcie wpisu z podpowiedzi (db.slownik_ukryte)
+function zamknijPodpowiedzi() {
+  document.querySelectorAll('.podp-lista').forEach(e => e.remove());
+}
+window.addEventListener('scroll', ev => {
+  // przewijanie wewnątrz samej listy nie może jej zamykać
+  if (ev.target instanceof Element && ev.target.closest('.podp-lista')) return;
+  zamknijPodpowiedzi();
+}, true);
+window.addEventListener('resize', zamknijPodpowiedzi);
+
+function podepnijPodpowiedzi(inputId, pobierzOpcje, kategoria) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.setAttribute('autocomplete', 'off');
+
+  const pokaz = () => {
+    zamknijPodpowiedzi();
+    const q = inp.value.trim().toLowerCase();
+    const opcje = (pobierzOpcje() || []).filter(o => !q || o.toLowerCase().includes(q)).slice(0, 40);
+    if (!opcje.length) return;
+    const r = inp.getBoundingClientRect();
+    const box = document.createElement('div');
+    box.className = 'podp-lista';
+    box.style.left  = r.left + 'px';
+    box.style.top   = (r.bottom + 2) + 'px';
+    box.style.width = Math.max(r.width, 200) + 'px';
+    opcje.forEach(o => {
+      const row = document.createElement('div');
+      row.className = 'podp-poz';
+      const nazwa = document.createElement('span');
+      nazwa.className = 'podp-nazwa';
+      nazwa.textContent = o;
+      const x = document.createElement('button');
+      x.className = 'podp-usun';
+      x.textContent = '✕';
+      x.title = 'Usuń z podpowiedzi';
+      // mousedown zamiast click — wyprzedza blur inputa
+      row.addEventListener('mousedown', ev => {
+        if (ev.target === x) return;
+        ev.preventDefault();
+        inp.value = o;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        zamknijPodpowiedzi();
+      });
+      x.addEventListener('mousedown', async ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        await window.api.slownik.ukryj(kategoria, o).catch(() => {});
+        await zaladujSlownik();
+        pokaz();
+      });
+      row.append(nazwa, x);
+      box.appendChild(row);
+    });
+    document.body.appendChild(box);
+  };
+
+  inp.addEventListener('focus', pokaz);
+  inp.addEventListener('click', pokaz);
+  inp.addEventListener('input', pokaz);
+  inp.addEventListener('blur', () => setTimeout(zamknijPodpowiedzi, 150));
+  inp.addEventListener('keydown', ev => { if (ev.key === 'Escape' || ev.key === 'Enter') zamknijPodpowiedzi(); });
+}
+
+// Para pól marka+model: wpisana marka zawęża listę modeli
+function podepnijSlownikSprzetu(markaId, modelId) {
+  podepnijPodpowiedzi(markaId, () => markiZHistoria(), 'marki');
+  podepnijPodpowiedzi(modelId, () => {
+    const ma = document.getElementById(markaId);
+    return modeleDlaMarki(ma ? ma.value : '');
+  }, 'modele');
+}
+
 // ── Navigation ─────────────────────────────────────────────────────────
+let _lastLoggedView = null;
+const NAV_NAZWY = { lista: 'Zlecenia', nowe: 'Nowe zlecenie', mechanicy: 'Mechanicy', sklep: 'Sklep', gmail: 'Gmail', statystyki: 'Statystyki', whatsapp: 'WhatsApp' };
 function navigate(view) {
+  if (view !== _lastLoggedView && NAV_NAZWY[view] && window.api.log) {
+    window.api.log('Przejście do zakładki: ' + NAV_NAZWY[view]).catch(() => {});
+    _lastLoggedView = view;
+  }
   currentView = view;
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const tab = document.getElementById(`nav-${view}`);
   if (tab) tab.classList.add('active');
 
-  // Gmail to osobny, trwały ekran — webview z zalogowaną skrzynką musi
+  // Gmail i WhatsApp to osobne, trwałe ekrany — webview z zalogowaną sesją musi
   // przeżyć nawigację (nie może być niszczony razem z innerHTML #content)
   const gmScreen = document.getElementById('gmailScreen');
+  const waScreen = document.getElementById('whatsappScreen');
   const content  = document.getElementById('content');
-  if (view === 'gmail') {
-    content.classList.add('d-none');
-    gmScreen.classList.remove('d-none');
-    initGmailWeb();
-    return;
-  }
-  gmScreen.classList.add('d-none');
-  content.classList.remove('d-none');
+  gmScreen.classList.toggle('d-none', view !== 'gmail');
+  if (waScreen) waScreen.classList.toggle('d-none', view !== 'whatsapp');
+  content.classList.toggle('d-none', view === 'gmail' || view === 'whatsapp');
+  if (view === 'gmail')    { initGmailWeb(); return; }
+  if (view === 'whatsapp') { initWhatsApp(); return; }
 
   switch (view) {
     case 'lista':     renderLista(); break;
@@ -200,10 +315,70 @@ function navigate(view) {
     case 'mechanicy': renderMechanicy(); break;
     case 'szczegoly': renderSzczegoly(currentZlecenieId); break;
     case 'sklep':     renderSklep(); break;
+    case 'statystyki': renderStatystyki(); break;
   }
 }
 
 function goBack() { navigate('lista'); }
+
+// ── Zdjęcia telefonem: QR do strony /foto/:token, podgląd odświeża się sam ──
+let _fotoQrTimer = null;
+
+async function pokazFotoQr(token, numer) {
+  const [info, settings] = await Promise.all([
+    window.api.server.info().catch(() => ({})),
+    window.api.settings.pobierz().catch(() => ({})),
+  ]);
+  const base = (settings.public_url || '').replace(/\/$/, '') || info.url || '';
+  const url = `${base}/foto/${token}`;
+  document.getElementById('fotoQrContent').innerHTML = `
+    <div style="font-size:.85rem;color:var(--slate-500);margin-bottom:12px">
+      Zeskanuj telefonem — otworzy się strona robienia zdjęć do zlecenia <b>${esc(numer)}</b>.
+      Zdjęcia z aparatu wyślą się same.
+    </div>
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}"
+      width="220" height="220" style="border-radius:12px;border:1px solid var(--slate-200)">
+    <div style="font-family:monospace;font-size:.66rem;color:var(--slate-400);word-break:break-all;margin-top:10px">${esc(url)}</div>
+    ${!settings.public_url ? `<div style="margin-top:10px;font-size:.75rem;color:#92400e;background:#fef3c7;border-radius:8px;padding:8px">
+      ⚠ Adres lokalny — telefon musi być w tej samej sieci WiFi. Włącz tunel (🌐 u góry), żeby działało przez internet.
+    </div>` : ''}
+    <div style="margin-top:12px;font-size:.78rem;color:var(--green-600);font-weight:700">Nowe zdjęcia pojawią się w zleceniu same ✨</div>
+  `;
+  document.getElementById('fotoQrModal').classList.remove('d-none');
+  // odświeżaj miniaturki na żywo, póki okno z QR jest otwarte
+  // (najpierw dociągnij świeże zdjęcia z chmury Supabase, jeśli skonfigurowana)
+  clearInterval(_fotoQrTimer);
+  _fotoQrTimer = setInterval(async () => {
+    await window.api.chmura.pobierzTeraz().catch(() => {});
+    if (currentZlecenieId) renderZdjecia(currentZlecenieId);
+  }, 4000);
+}
+
+function zamknijFotoQr() {
+  clearInterval(_fotoQrTimer);
+  _fotoQrTimer = null;
+  document.getElementById('fotoQrModal').classList.add('d-none');
+  if (currentZlecenieId) renderZdjecia(currentZlecenieId);
+}
+
+// ── Pula wolnych zleceń: „✋ Weź" przypisuje zlecenie do aktywnego mechanika ──
+async function przejmijZlecenie(id, zeSzczegolow) {
+  if (!activeMechanik) {
+    toast('Najpierw wybierz siebie — kliknij nazwisko w prawym górnym rogu', 'warning');
+    goToPicker();
+    return;
+  }
+  const r = await window.api.zlecenia.przejmij({ id, mechanik_id: activeMechanik }).catch(() => ({ ok: false, error: 'Błąd połączenia' }));
+  if (r.ok) {
+    const m = getMechanik(activeMechanik);
+    toast(`Zlecenie ${r.numer} jest teraz Twoje${m ? ' (' + m.nazwa + ')' : ''}`);
+  } else {
+    toast(r.error || 'Nie udało się przejąć zlecenia', 'error');
+  }
+  // odśwież widok — zlecenie znika z puli / dostaje mechanika
+  if (zeSzczegolow) renderSzczegoly(id);
+  else { loadOrders(); loadStats(); }
+}
 
 // ── Lista view ─────────────────────────────────────────────────────────
 function renderLista() {
@@ -221,9 +396,9 @@ function renderLista() {
       <div id="ordersList" class="orders-list"></div>
     </div>
   `;
-  const statuses = ['Wszystkie', 'Przyjęto', 'W naprawie', 'Czeka na części', 'Gotowe', 'Wydano'];
+  const statuses = ['Wszystkie', 'Wolne', 'Przyjęto', 'W naprawie', 'Czeka na części', 'Gotowe', 'Wydano'];
   document.getElementById('statusChips').innerHTML = statuses.map(s =>
-    `<div class="chip${s === filterStatus ? ' active' : ''}" onclick="setFilter('${s}')">${s}</div>`
+    `<div class="chip${s === filterStatus ? ' active' : ''}" data-f="${s}" onclick="setFilter('${s}')">${s === 'Wolne' ? '🆓 Wolne' : s}</div>`
   ).join('');
   loadStats();
   loadOrders();
@@ -252,15 +427,17 @@ function debounceSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(
 
 function setFilter(status) {
   filterStatus = status;
-  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.textContent === status));
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', (c.dataset.f || c.textContent) === status));
   loadOrders();
 }
 
 async function loadOrders() {
   const search = document.getElementById('searchInput')?.value || '';
+  // Filtr „Wolne" = pula nieprzypisanych zleceń, widoczna niezależnie od wybranego mechanika
+  const wolne = filterStatus === 'Wolne';
   const lista = await window.api.zlecenia.lista({
-    status: filterStatus, szukaj: search,
-    mechanik_id: activeMechanik !== null ? activeMechanik : 'wszyscy',
+    status: wolne ? 'Wszystkie' : filterStatus, szukaj: search,
+    mechanik_id: wolne ? 'wolne' : (activeMechanik !== null ? activeMechanik : 'wszyscy'),
   }).catch(() => null);
   const el = document.getElementById('ordersList');
   if (!el) return;
@@ -276,10 +453,12 @@ async function loadOrders() {
     const m = getMechanik(z.mechanik_id);
     return `<div class="order-row" onclick="openZlecenie(${z.id})">
       <div class="order-numer">${esc(z.numer)}</div>
-      <div class="order-client">${esc(z.klient_nazwa)}</div>
+      <div class="order-client">${esc(z.klient_nazwa)}${z.klient_telefon ? `<button class="wa-mini" onclick="event.stopPropagation();otworzWhatsAppKlienta('${esc(z.klient_telefon)}')" title="Napisz do klienta na WhatsApp">💬</button>` : ''}</div>
       <div class="order-device">${esc([z.marka, z.model].filter(Boolean).join(' ') || '—')}</div>
       <div>${badge(z.status)}</div>
-      <div>${m ? `<span class="mech-badge" style="background:${m.kolor}" title="${esc(m.nazwa)}">${esc(initials(m.nazwa))}</span>` : ''}</div>
+      <div>${m
+        ? `<span class="mech-badge" style="background:${m.kolor}" title="${esc(m.nazwa)}">${esc(initials(m.nazwa))}</span>`
+        : `<button class="btn btn-sm wez-btn" onclick="event.stopPropagation();przejmijZlecenie(${z.id})" title="Weź to zlecenie na swoje konto">✋ Weź</button>`}</div>
       <div class="order-date">${fmtDate(z.data_przyjecia)}</div>
       <svg class="order-arrow" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
@@ -297,6 +476,7 @@ async function renderSzczegoly(id) {
 
   const data = await window.api.zlecenia.pobierz(id).catch(() => null);
   if (!data) { navigate('lista'); return; }
+  if (window.api.log) window.api.log(`Otwarto zlecenie ${data.numer} (${data.klient_nazwa})`).catch(() => {});
 
   const czesci = data.czesci || [];
   const k = calcKoszty(data);
@@ -311,14 +491,15 @@ async function renderSzczegoly(id) {
   }).join('');
 
   const czRows = czesci.length
-    ? czesci.map(c => `<tr class="czesc-row" id="czesc-${c.id}" data-total="${c.ilosc * c.cena_jednostkowa}">
+    ? czesci.map(c => `<tr class="czesc-row" id="czesc-${c.id}" data-total="${c.ilosc * c.cena_jednostkowa}" data-zakup="${c.ilosc * (c.cena_zakupu || 0)}">
         <td>${esc(c.nazwa)}</td>
         <td class="text-center">${c.ilosc}</td>
+        <td class="text-right" style="color:var(--slate-400)">${c.cena_zakupu ? fmt(c.cena_zakupu) : '—'}</td>
         <td class="text-right">${fmt(c.cena_jednostkowa)}</td>
         <td class="text-right">${fmt(c.ilosc * c.cena_jednostkowa)}</td>
         <td class="text-center">${trashBtn(`usunCzesc(${c.id})`)}</td>
       </tr>`).join('')
-    : `<tr><td colspan="5" class="text-center" style="color:var(--slate-400);padding:20px;font-size:.82rem">Brak części</td></tr>`;
+    : `<tr><td colspan="6" class="text-center" style="color:var(--slate-400);padding:20px;font-size:.82rem">Brak części</td></tr>`;
 
   document.getElementById('content').innerHTML = `
     <div class="content-wrap">
@@ -329,6 +510,8 @@ async function renderSzczegoly(id) {
         ${badge(data.status)}
         ${mechanik ? `<span class="mech-badge" style="background:${mechanik.kolor};width:auto;border-radius:100px;padding:0 10px;font-size:.75rem" title="${esc(mechanik.nazwa)}">${esc(mechanik.nazwa)}</span>` : ''}
         <div style="margin-left:auto;display:flex;gap:8px">
+          ${!data.mechanik_id ? `<button class="btn btn-primary btn-sm" onclick="przejmijZlecenie(${id}, true)" title="Przypisz to zlecenie do siebie">✋ Weź na siebie</button>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="otworzWhatsAppKlienta('${esc(data.klient_telefon || '')}')" title="Otwórz rozmowę WhatsApp z klientem" style="color:#16a34a;border-color:#16a34a">💬 WhatsApp</button>
           <button class="btn btn-outline btn-sm" id="emailBtn" onclick="wyślijEmailKlienta(${id},this.dataset.email)" data-email="${esc(data.klient_email || '')}">📧 E-mail</button>
           <button class="btn btn-outline btn-sm" onclick="window.api.etykieta.drukuj(${id})">🏷 Etykieta</button>
           <button class="btn btn-outline btn-sm" onclick="printZlecenie('${data.numer}')">🖨 Drukuj PDF</button>
@@ -356,11 +539,10 @@ async function renderSzczegoly(id) {
           <div class="section-card">
             <div class="section-label">Sprzęt</div>
             <div class="form-row-3">
-              <div class="form-group"><label class="form-label">Marka</label><input class="form-control" id="f-ma" list="ml" value="${esc(data.marka || '')}"></div>
+              <div class="form-group"><label class="form-label">Marka</label><input class="form-control" id="f-ma" value="${esc(data.marka || '')}"></div>
               <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="f-mo" value="${esc(data.model || '')}"></div>
               <div class="form-group"><label class="form-label">Nr seryjny</label><input class="form-control" id="f-sn" value="${esc(data.nr_seryjny || '')}"></div>
             </div>
-            <datalist id="ml"><option value="VENOM"><option value="Honda"><option value="Stihl"><option value="Husqvarna"><option value="Kärcher"><option value="Makita"><option value="TAIA"></datalist>
             <div class="form-group" style="margin-top:4px"><label class="form-label">Mechanik</label>
               <select class="form-control" id="f-mech">${mechanikOptions}</select>
             </div>
@@ -392,10 +574,18 @@ async function renderSzczegoly(id) {
           </div>
 
           <div class="kosztorys-card">
-            <div class="section-label" style="color:rgba(255,255,255,.5)">Kosztorys</div>
+            <div class="section-label" style="color:rgba(255,255,255,.5)">Kosztorys (dla klienta)</div>
             <div class="kosz-row"><span>Części</span><span id="sumCzesci">${fmt(k.czTotal)}</span></div>
             <div class="kosz-row"><span>Robocizna</span><span id="sumRob">${fmt(k.rob)}</span></div>
             <div class="kosz-total"><span>RAZEM</span><span id="sumTotal">${fmt(k.total)}</span></div>
+          </div>
+
+          <div class="section-card no-print">
+            <div class="section-label">💰 Dla warsztatu</div>
+            <div class="date-row"><span>Zakup części</span><span class="date-val" id="sumZakup">${fmt(k.czZakup)}</span></div>
+            <div class="date-row"><span>Zysk na częściach</span><span class="date-val" id="sumMarza">${fmt(k.czTotal - k.czZakup)}</span></div>
+            <div class="date-row"><span>Zysk razem</span><span class="date-val" id="sumZysk" style="color:#16a34a;font-weight:800">${fmt(k.zysk)}</span></div>
+            <div style="font-size:.7rem;color:var(--slate-400);margin-top:6px">Klient tego nie widzi — ani na wydruku, ani w e-mailach</div>
           </div>
 
         </div>
@@ -406,19 +596,21 @@ async function renderSzczegoly(id) {
         <table class="parts-table">
           <thead><tr>
             <th>Nazwa</th><th class="text-center">Ilość</th>
-            <th class="text-right">Cena jedn.</th><th class="text-right">Razem</th><th></th>
+            <th class="text-right" title="Ile część kosztowała warsztat — klient tego nie widzi">Zakup (sklep)</th>
+            <th class="text-right">Cena klienta</th><th class="text-right">Razem</th><th></th>
           </tr></thead>
           <tbody id="czescieBody">${czRows}</tbody>
           <tfoot><tr>
-            <td colspan="3" class="text-right" style="font-weight:700">Razem części:</td>
+            <td colspan="4" class="text-right" style="font-weight:700">Razem części:</td>
             <td class="text-right" id="tfootCzesci" style="font-weight:800">${fmt(k.czTotal)}</td>
             <td></td>
           </tr></tfoot>
         </table>
         <div class="add-czesc-form">
           <input class="form-control" id="nc-n" placeholder="Nazwa części" style="flex:3">
-          <input class="form-control" id="nc-i" type="number" value="1" min="0.01" step="0.01" style="width:70px">
-          <input class="form-control" id="nc-c" type="number" step="0.01" placeholder="Cena" style="width:110px">
+          <input class="form-control" id="nc-i" type="number" value="1" min="0.01" step="0.01" style="width:70px" title="Ilość">
+          <input class="form-control" id="nc-z" type="number" step="0.01" placeholder="Zakup (sklep)" style="width:110px" title="Ile część kosztowała warsztat — klient tego nie widzi">
+          <input class="form-control" id="nc-c" type="number" step="0.01" placeholder="Cena klienta" style="width:110px" title="Cena, którą płaci klient — trafia na wydruk i do kosztorysu">
           <button class="btn btn-primary btn-sm" onclick="dodajCzesc(${id})">＋ Dodaj</button>
         </div>
       </div>
@@ -437,7 +629,10 @@ async function renderSzczegoly(id) {
       </div>
 
       <div class="section-card no-print">
-        <div class="section-label">Zdjęcia dokumentacyjne</div>
+        <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Zdjęcia dokumentacyjne</span>
+          <button class="btn btn-outline btn-sm" onclick="pokazFotoQr('${esc(data.token)}', '${esc(data.numer)}')" title="Zeskanuj QR telefonem i rób zdjęcia aparatem — same się dodadzą">📱 Dodaj telefonem</button>
+        </div>
         <div class="photos-cols">
           <div>
             <div class="photos-group-title">
@@ -473,6 +668,13 @@ async function renderSzczegoly(id) {
 
   // Load photos asynchronously after DOM is ready
   renderZdjecia(id);
+
+  // Słownik podpowiedzi: marki/modele/części z historii
+  zaladujSlownik().then(() => {
+    podepnijSlownikSprzetu('f-ma', 'f-mo');
+    podepnijPodpowiedzi('nc-n',  () => (_slownik && _slownik.czesci) || [], 'czesci');
+    podepnijPodpowiedzi('zam-n', () => (_slownik && _slownik.czesci) || [], 'czesci');
+  });
 }
 
 function trashBtn(onclick) {
@@ -493,7 +695,7 @@ function buildPrint(data, czesci, k, mechanik) {
     <td style="padding:5px 8px;text-align:right">${fmt(c.ilosc * c.cena_jednostkowa)}</td>
   </tr>`).join('');
 
-  return `<div class="print-only" style="display:none;font-family:Arial,sans-serif;max-width:740px;margin:0 auto;padding:24px">
+  return `<div class="print-only" style="display:none;font-family:Arial,sans-serif;max-width:740px;margin:0 auto;padding:24px;color:#111">
     <div style="display:flex;justify-content:space-between;border-bottom:2.5px solid #16a34a;padding-bottom:12px;margin-bottom:22px">
       <div>
         <div style="font-size:1.4rem;font-weight:900;color:#166534">Agroserwis Nysa</div>
@@ -566,13 +768,19 @@ async function printZlecenie(numer) {
 }
 
 function recalc() {
-  let czTotal = 0;
-  document.querySelectorAll('.czesc-row').forEach(r => { czTotal += parseFloat(r.dataset.total) || 0; });
+  let czTotal = 0, czZakup = 0;
+  document.querySelectorAll('.czesc-row').forEach(r => {
+    czTotal += parseFloat(r.dataset.total) || 0;
+    czZakup += parseFloat(r.dataset.zakup) || 0;
+  });
   const rob = parseFloat(val('f-rob')) || 0;
-  if (document.getElementById('sumCzesci'))    document.getElementById('sumCzesci').textContent    = fmt(czTotal);
-  if (document.getElementById('sumRob'))       document.getElementById('sumRob').textContent       = fmt(rob);
-  if (document.getElementById('sumTotal'))     document.getElementById('sumTotal').textContent     = fmt(czTotal + rob);
-  if (document.getElementById('tfootCzesci')) document.getElementById('tfootCzesci').textContent  = fmt(czTotal);
+  if (document.getElementById('sumCzesci'))   document.getElementById('sumCzesci').textContent   = fmt(czTotal);
+  if (document.getElementById('sumRob'))      document.getElementById('sumRob').textContent      = fmt(rob);
+  if (document.getElementById('sumTotal'))    document.getElementById('sumTotal').textContent    = fmt(czTotal + rob);
+  if (document.getElementById('tfootCzesci')) document.getElementById('tfootCzesci').textContent = fmt(czTotal);
+  if (document.getElementById('sumZakup'))    document.getElementById('sumZakup').textContent    = fmt(czZakup);
+  if (document.getElementById('sumMarza'))    document.getElementById('sumMarza').textContent    = fmt(czTotal - czZakup);
+  if (document.getElementById('sumZysk'))     document.getElementById('sumZysk').textContent     = fmt(czTotal - czZakup + rob);
 }
 
 async function zmienStatus(id, status) {
@@ -610,10 +818,11 @@ async function saveRobocizna(id) {
 async function dodajCzesc(zlecenieId) {
   const nazwa = document.getElementById('nc-n').value.trim();
   const ilosc = parseFloat(document.getElementById('nc-i').value) || 1;
+  const zakup = parseFloat(document.getElementById('nc-z').value) || 0;
   const cena  = parseFloat(document.getElementById('nc-c').value) || 0;
   if (!nazwa) { document.getElementById('nc-n').focus(); return; }
 
-  const res = await window.api.czesci.dodaj({ zlecenie_id: zlecenieId, nazwa, ilosc, cena_jednostkowa: cena });
+  const res = await window.api.czesci.dodaj({ zlecenie_id: zlecenieId, nazwa, ilosc, cena_jednostkowa: cena, cena_zakupu: zakup });
 
   const tbody = document.getElementById('czescieBody');
   if (tbody.querySelector('td[colspan]')) tbody.innerHTML = '';
@@ -622,9 +831,11 @@ async function dodajCzesc(zlecenieId) {
   row.className = 'czesc-row';
   row.id = `czesc-${res.id}`;
   row.dataset.total = ilosc * cena;
+  row.dataset.zakup = ilosc * zakup;
   row.innerHTML = `
     <td>${esc(nazwa)}</td>
     <td class="text-center">${ilosc}</td>
+    <td class="text-right" style="color:var(--slate-400)">${zakup ? fmt(zakup) : '—'}</td>
     <td class="text-right">${fmt(cena)}</td>
     <td class="text-right">${fmt(ilosc * cena)}</td>
     <td class="text-center">${trashBtn(`usunCzesc(${res.id})`)}</td>`;
@@ -632,6 +843,7 @@ async function dodajCzesc(zlecenieId) {
 
   document.getElementById('nc-n').value = '';
   document.getElementById('nc-i').value = '1';
+  document.getElementById('nc-z').value = '';
   document.getElementById('nc-c').value = '';
   document.getElementById('nc-n').focus();
   recalc();
@@ -653,6 +865,93 @@ function askDelete(id) {
     toast('Zlecenie usunięte');
     navigate('lista');
   });
+}
+
+// ── Statystyki ─────────────────────────────────────────────────────────
+// Jedna barwa (zieleń marki) dla wielkości; tożsamość niesie tekst i kropki
+// mechaników, nie kolory słupków. Wartości zawsze w kolorze tekstu.
+function pasekWiersz(nazwa, count, max, prawa, tytul) {
+  const proc = max > 0 ? Math.max(2, Math.round(count / max * 100)) : 0;
+  return `<div class="bar-wiersz" title="${esc(tytul || `${nazwa}: ${count}`)}">
+    <div class="bar-etykieta">${esc(nazwa)}</div>
+    <div class="bar-tor"><div class="bar-wyp" style="width:${proc}%"></div></div>
+    <div class="bar-wartosc">${esc(String(prawa != null ? prawa : count))}</div>
+  </div>`;
+}
+
+function sekcjaTop(tytul, wiersze) {
+  return `<div class="section-card">
+    <div class="section-label">${tytul}</div>
+    ${wiersze || '<div style="color:var(--slate-400);font-size:.82rem;padding:12px 0">Brak danych</div>'}
+  </div>`;
+}
+
+const MIES_SKROTY = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
+
+async function renderStatystyki() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="loading">Ładowanie...</div>';
+  const s = await window.api.statystyki.szczegolowe().catch(() => null);
+  if (!s) { el.innerHTML = '<div class="loading">Nie udało się wczytać statystyk</div>'; return; }
+
+  const maxMarki  = Math.max(...s.marki.map(m => m.count), 0);
+  const maxModele = Math.max(...s.modele.map(m => m.count), 0);
+  const maxCzesci = Math.max(...s.czesci.map(c => c.count), 0);
+  const maxMech   = Math.max(...s.mechanicy.map(m => m.count), 0);
+  const maxMies   = Math.max(...s.miesiace.map(m => m.count), 0);
+
+  const markiRows  = s.marki.map(m => pasekWiersz(m.nazwa, m.count, maxMarki, `${m.count}×`,
+    `${m.nazwa}: ${m.count} zleceń · przychód ${fmt(m.przychod)}`)).join('');
+  const modeleRows = s.modele.map(m => pasekWiersz(m.nazwa, m.count, maxModele, `${m.count}×`)).join('');
+  const czesciRows = s.czesci.map(c => pasekWiersz(c.nazwa, c.count, maxCzesci, `${c.count} szt.`)).join('');
+  const maxUsterki = Math.max(...(s.usterki || []).map(u => u.count), 0);
+  const usterkiRows = (s.usterki || []).map(u => pasekWiersz(u.nazwa, u.count, maxUsterki, `${u.count}×`,
+    `Słowo „${u.nazwa}" padło w ${u.count} zleceniach`)).join('');
+  const mechRows   = s.mechanicy.map(m => `<div class="bar-wiersz" title="${esc(`${m.nazwa}: ${m.count} zleceń · przychód ${fmt(m.przychod)} · zysk ${fmt(m.zysk)}`)}">
+    <div class="bar-etykieta"><span class="mech-kropka" style="background:${esc(m.kolor)}"></span>${esc(m.nazwa)}</div>
+    <div class="bar-tor"><div class="bar-wyp" style="width:${maxMech > 0 ? Math.max(2, Math.round(m.count / maxMech * 100)) : 0}%"></div></div>
+    <div class="bar-wartosc">${m.count}× · ${fmt(m.przychod)}</div>
+  </div>`).join('');
+
+  const miesKols = s.miesiace.map(m => {
+    const [rok, nrM] = m.miesiac.split('-');
+    const wys = maxMies > 0 ? Math.max(4, Math.round(m.count / maxMies * 100)) : 4;
+    return `<div class="mies-kol" title="${esc(`${MIES_SKROTY[parseInt(nrM) - 1]} ${rok}: ${m.count} zleceń · przychód ${fmt(m.przychod)} · zysk ${fmt(m.zysk)}`)}">
+      <div class="mies-liczba">${m.count}</div>
+      <div class="mies-slupek-tor"><div class="mies-slupek" style="height:${wys}%"></div></div>
+      <div class="mies-podpis">${MIES_SKROTY[parseInt(nrM) - 1]} ${rok.slice(2)}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="content-wrap">
+      <div style="font-size:1.1rem;font-weight:900;color:var(--slate-800);margin-bottom:16px">📊 Statystyki warsztatu</div>
+
+      <div class="stat-kafelki">
+        <div class="stat-kafelek"><div class="stat-liczba">${s.razem.zlecenia}</div><div class="stat-opis">zleceń łącznie</div></div>
+        <div class="stat-kafelek"><div class="stat-liczba">${fmt(s.razem.przychod)}</div><div class="stat-opis">przychód</div></div>
+        <div class="stat-kafelek"><div class="stat-liczba" style="color:var(--green-600)">${fmt(s.razem.zysk)}</div><div class="stat-opis">zysk warsztatu</div></div>
+        <div class="stat-kafelek"><div class="stat-liczba">${fmt(s.razem.srednia)}</div><div class="stat-opis">średnie zlecenie</div></div>
+      </div>
+
+      ${s.miesiace.length ? `<div class="section-card">
+        <div class="section-label">Zlecenia po miesiącach</div>
+        <div class="mies-wykres">${miesKols}</div>
+      </div>` : ''}
+
+      <div class="photos-cols" style="margin-top:16px">
+        ${sekcjaTop('🏭 Najczęściej naprawiane marki', markiRows)}
+        ${sekcjaTop('🔧 Najczęściej naprawiane modele', modeleRows)}
+      </div>
+      <div class="photos-cols" style="margin-top:16px">
+        ${sekcjaTop('⚙️ Najczęściej używane części', czesciRows)}
+        ${sekcjaTop('👨‍🔧 Mechanicy', mechRows)}
+      </div>
+      <div class="photos-cols" style="margin-top:16px">
+        ${sekcjaTop('🔩 Najczęstsze usterki (słowa z opisów)', usterkiRows)}
+      </div>
+    </div>
+  `;
 }
 
 // ── Nowe zlecenie ──────────────────────────────────────────────────────
@@ -704,14 +1003,15 @@ async function renderNowe() {
           <div class="section-label">Sprzęt</div>
           <div class="form-row-3">
             <div class="form-group"><label class="form-label">Marka</label>
-              <input class="form-control" id="n-ma" list="ml2" placeholder="VENOM"></div>
+              <input class="form-control" id="n-ma" placeholder="VENOM"></div>
             <div class="form-group"><label class="form-label">Model</label>
               <input class="form-control" id="n-mo" placeholder="GS-460"></div>
             <div class="form-group"><label class="form-label">Nr seryjny</label>
               <input class="form-control" id="n-sn" placeholder="SN-00000"></div>
           </div>
-          <datalist id="ml2"><option value="VENOM"><option value="Honda"><option value="Stihl">
-            <option value="Husqvarna"><option value="Kärcher"><option value="Makita"><option value="TAIA"></datalist>
+          <div class="form-group" style="margin-top:4px"><label class="form-label">Mechanik</label>
+            <select class="form-control" id="n-mech"><option value="">🆓 Do puli — każdy może wziąć</option></select>
+          </div>
         </div>
 
         <div class="section-card nowe-usterka">
@@ -726,6 +1026,15 @@ async function renderNowe() {
     </div>
   `;
   document.getElementById('n-kn').focus();
+  // Wybór mechanika: domyślnie aktywny z prawego górnego rogu, albo pula
+  window.api.mechanicy.lista().then(ms => {
+    mechanicyCache = ms;
+    const sel = document.getElementById('n-mech');
+    if (sel) sel.innerHTML = '<option value="">🆓 Do puli — każdy może wziąć</option>' +
+      ms.map(m => `<option value="${m.id}"${m.id === activeMechanik ? ' selected' : ''}>${esc(m.nazwa)}</option>`).join('');
+  }).catch(() => {});
+  // Słownik podpowiedzi: marki/modele z historii zleceń
+  zaladujSlownik().then(() => podepnijSlownikSprzetu('n-ma', 'n-mo'));
   // Check Apilo connection status
   window.api.apilo.status().then(s => {
     const badge = document.getElementById('apiloConnBadge');
@@ -754,7 +1063,8 @@ async function submitNowe() {
   const res = await window.api.zlecenia.dodaj({
     klient_nazwa: kn, klient_telefon: val('n-kt'), klient_email: val('n-ke'),
     marka: val('n-ma'), model: val('n-mo'), nr_seryjny: val('n-sn'),
-    opis_usterki: ust, mechanik_id: activeMechanik,
+    opis_usterki: ust,
+    mechanik_id: document.getElementById('n-mech')?.value ? parseInt(document.getElementById('n-mech').value) : null,
   });
   toast(`Zlecenie ${res.numer} utworzone`);
   if (res.emailSent) toast(`E-mail z linkiem wysłany do klienta`, 'success');
@@ -916,6 +1226,49 @@ async function testGmail(btn) {
 
 // Firefox UA — patrz komentarz w main.js przy app.userAgentFallback
 const GMAIL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
+
+// ── WhatsApp Web (firmowy numer, jedna trwała sesja) ───────────────────
+let waView = null;
+
+function ensureWhatsAppView() {
+  if (waView) return waView;
+  waView = document.createElement('webview');
+  waView.id = 'waView';
+  waView.className = 'gmail-webview active';
+  waView.setAttribute('partition', 'persist:whatsapp');
+  waView.setAttribute('useragent', GMAIL_UA);
+  waView.src = 'https://web.whatsapp.com/';
+  // WhatsApp wpisuje liczbę nieprzeczytanych do tytułu karty: "(3) WhatsApp"
+  waView.addEventListener('page-title-updated', e => {
+    const m = (e.title || '').match(/\((\d+)\)/);
+    ustawWaBadge(m ? parseInt(m[1]) : 0);
+  });
+  document.getElementById('waWrap').appendChild(waView);
+  return waView;
+}
+
+function initWhatsApp() { ensureWhatsAppView(); }
+
+function odswiezWhatsApp() {
+  if (waView) { try { waView.reload(); } catch {} }
+}
+
+function ustawWaBadge(n) {
+  const b = document.getElementById('waBadge');
+  if (!b) return;
+  if (n > 0) { b.textContent = n > 9 ? '9+' : String(n); b.style.display = 'block'; }
+  else b.style.display = 'none';
+}
+
+// Otwiera rozmowę WhatsApp z numerem klienta (polskie numery bez kierunkowego → +48)
+function otworzWhatsAppKlienta(telefon) {
+  let num = String(telefon || '').replace(/[^\d]/g, '');
+  if (!num) { toast('Klient nie ma numeru telefonu', 'error'); return; }
+  if (num.length === 9) num = '48' + num;
+  const wv = ensureWhatsAppView();
+  navigate('whatsapp');
+  try { wv.src = 'https://web.whatsapp.com/send?phone=' + num; } catch {}
+}
 let gmailWebAccounts = [];
 let activeGmailWebId = null;
 let gmailSub = 'skrzynka';
@@ -1204,8 +1557,10 @@ async function openPhoneModal() {
     window.api.mechanicy.lista().catch(() => []),
   ]);
 
-  // Preferuj Railway (publicUrl) — działa gdy komputer wyłączony
-  const cloudUrl = (settings.public_url || '').replace(/\/$/, '');
+  // Preferuj chmurę tylko gdy faktycznie serwuje apkę mobilną
+  // (Supabase /functions/v1 serwuje tylko strony publiczne, nie /mobile)
+  const cloudUrl0 = (settings.public_url || '').replace(/\/$/, '');
+  const cloudUrl = cloudUrl0.includes('/functions/v1') ? '' : cloudUrl0;
   const localUrl = info.url;
   const baseUrl  = cloudUrl || localUrl;
   const isCloud  = !!cloudUrl;
@@ -1362,6 +1717,47 @@ async function polaczAllegro() {
   }
 }
 
+async function testujSupabase() {
+  const btn = document.getElementById('supabaseTestBtn');
+  // Najpierw zapisz dane z pól — test ma używać tego, co widać na ekranie
+  await window.api.settings.zapisz({
+    supabase_url: document.getElementById('set-supabase-url').value.trim().replace(/\/$/, ''),
+    supabase_key: document.getElementById('set-supabase-key').value.trim(),
+  });
+  btn.disabled = true; btn.textContent = '⏳ Łączenie...';
+  const res = await window.api.chmura.test();
+  btn.disabled = false; btn.textContent = '🔗 Testuj połączenie';
+  if (res.ok) {
+    toast('Supabase połączony — serwer stały działa!');
+    document.getElementById('supabaseStatusBar').style.display = 'flex';
+    // adres publiczny ustawił się sam — odśwież pole
+    const s = await window.api.settings.pobierz().catch(() => ({}));
+    document.getElementById('set-public-url').value = s.public_url || '';
+  } else {
+    toast('Błąd: ' + res.error, 'error');
+  }
+}
+
+async function testujShoper() {
+  const btn = document.getElementById('shoperTestBtn');
+  // Najpierw zapisz dane z pól — test ma używać tego, co widać na ekranie
+  await window.api.settings.zapisz({
+    shoper_url:   document.getElementById('set-shoper-url').value.trim().replace(/\/$/, ''),
+    shoper_login: document.getElementById('set-shoper-login').value.trim(),
+    shoper_haslo: document.getElementById('set-shoper-haslo').value,
+  });
+  btn.disabled = true; btn.textContent = '⏳ Łączenie...';
+  const res = await window.api.shoper.test();
+  btn.disabled = false; btn.textContent = '🔗 Testuj połączenie';
+  if (res.ok) {
+    toast('Shoper połączony pomyślnie!');
+    document.getElementById('shoperStatusBar').style.display = 'flex';
+    document.getElementById('shoperStatusText').textContent = 'Połączono z Shoperem — zamówienia w zakładce Sklep';
+  } else {
+    toast('Błąd: ' + res.error, 'error');
+  }
+}
+
 async function renderSklep() {
   const el = document.getElementById('content');
   el.innerHTML = '<div class="loading">Ładowanie...</div>';
@@ -1384,6 +1780,18 @@ async function renderSklep() {
   const emailTo = settings.shop_email_to || '';
   const canEmail = !!emailTo && oczekujace.length > 0;
 
+  // Zsumowane oczekujące pozycje po nazwie części (te same nazwy → jedna pigułka)
+  const sumy = new Map();
+  for (const p of oczekujace) {
+    const k = (p.nazwa_czesci || '').trim().toLowerCase();
+    if (!sumy.has(k)) sumy.set(k, { nazwa: (p.nazwa_czesci || '').trim(), szt: 0, zgloszen: 0 });
+    const e = sumy.get(k);
+    e.szt += parseFloat(p.ilosc) || 1;
+    e.zgloszen++;
+  }
+  const sumRows = [...sumy.values()].sort((a, b) => b.szt - a.szt);
+  const sumSzt = sumRows.reduce((s, r) => s + r.szt, 0);
+
   function rowHtml(p) {
     const d = new Date(p.created_at).toLocaleDateString('pl-PL', { day:'2-digit', month:'2-digit', year:'2-digit' });
     const masz = [p.marka, p.model].filter(Boolean).join(' ') || '—';
@@ -1403,8 +1811,10 @@ async function renderSklep() {
     </tr>`;
   }
 
-  // Check Allegro status
+  // Check Allegro + Shoper + Apilo status
   const allegroSt = await window.api.allegro.status().catch(() => ({ connected: false }));
+  const shoperSt  = await window.api.shoper.status().catch(() => ({ configured: false }));
+  const apiloSt   = await window.api.apilo.status().catch(() => ({ connected: false }));
 
   el.innerHTML = `
     <div class="content-wrap">
@@ -1431,6 +1841,19 @@ async function renderSklep() {
             ${l} <span style="font-weight:900">${c}</span>
           </button>`).join('')}
       </div>
+
+      ${sklepFilter === 'oczekuje' && oczekujace.length ? `
+      <div style="background:var(--surface);border:2px solid var(--green-600);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);margin-bottom:8px">🧾 Do zamówienia — zsumowane</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${sumRows.map(r => `<span style="background:var(--slate-100);border-radius:100px;padding:5px 12px;font-size:.84rem;font-weight:700">${esc(r.nazwa)} <span style="color:var(--green-600);font-weight:900">× ${r.szt}</span>${r.zgloszen > 1 ? ` <span style="color:var(--slate-400);font-weight:500;font-size:.72rem">(${r.zgloszen} zgłoszenia)</span>` : ''}</span>`).join('')}
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="sklepZamowWszystko()" style="white-space:nowrap;flex-shrink:0">✓ Zamówiono wszystko (${sumSzt} szt.)</button>
+        </div>
+      </div>` : ''}
 
       ${filtered.length === 0 ? `<div style="text-align:center;padding:48px 24px;color:var(--slate-400)">
         <div style="font-size:2rem;margin-bottom:8px">📭</div>
@@ -1471,10 +1894,60 @@ async function renderSklep() {
           }
         </div>
       </div>
+
+      <!-- SEKCJA SHOPER -->
+      <div style="margin-top:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:1rem;font-weight:900;color:var(--slate-800)">🏪 Zamówienia Shoper</div>
+            <div style="font-size:.78rem;color:var(--slate-500);margin-top:2px">Ostatnie zamówienia z Twojego sklepu internetowego</div>
+          </div>
+          ${shoperSt.configured
+            ? `<button class="btn btn-outline btn-sm" onclick="odswiezShoper()">↺ Odśwież</button>`
+            : `<button class="btn btn-outline btn-sm" onclick="openSettings()">🔗 Skonfiguruj Shoper w Ustawieniach</button>`
+          }
+        </div>
+        <div id="shoperOrders">
+          ${shoperSt.configured
+            ? '<div style="color:var(--slate-400);font-size:.82rem;text-align:center;padding:20px">Ładowanie zamówień...</div>'
+            : `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:10px;padding:20px;text-align:center;color:var(--slate-400);font-size:.85rem">
+                Skonfiguruj Shopera w Ustawieniach → 🏪 Shoper aby zobaczyć zamówienia tutaj
+               </div>`
+          }
+        </div>
+      </div>
+
+      <!-- SEKCJA APILO -->
+      <div style="margin-top:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:1rem;font-weight:900;color:var(--slate-800)">📮 Zamówienia Apilo</div>
+            <div style="font-size:.78rem;color:var(--slate-500);margin-top:2px">Zamówienia z marketplace'ów — oznacz w Apilo słowem „serwis", żeby trafiły do serwisu</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${apiloSt.connected ? `
+              <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--slate-600);cursor:pointer">
+                <input type="checkbox" id="apiloSerwisTylko" checked onchange="odswiezApilo()"> tylko „serwis"
+              </label>
+              <button class="btn btn-outline btn-sm" onclick="odswiezApilo()">↺ Odśwież</button>`
+            : `<button class="btn btn-outline btn-sm" onclick="openSettings()">🔗 Połącz Apilo w Ustawieniach</button>`}
+          </div>
+        </div>
+        <div id="apiloOrders">
+          ${apiloSt.connected
+            ? '<div style="color:var(--slate-400);font-size:.82rem;text-align:center;padding:20px">Ładowanie zamówień...</div>'
+            : `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:10px;padding:20px;text-align:center;color:var(--slate-400);font-size:.85rem">
+                Podłącz konto Apilo w Ustawieniach → 📮 Apilo aby zobaczyć zamówienia tutaj
+               </div>`
+          }
+        </div>
+      </div>
     </div>
   `;
 
   if (allegroSt.connected) odswiezAllegro();
+  if (shoperSt.configured) odswiezShoper();
+  if (apiloSt.connected) odswiezApilo();
 }
 
 async function odswiezAllegro() {
@@ -1525,6 +1998,119 @@ async function allegroDoWarsztatu(idx) {
   }
 }
 
+async function odswiezApilo() {
+  const el = document.getElementById('apiloOrders');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--slate-400);font-size:.82rem;text-align:center;padding:20px">Ładowanie...</div>';
+  const tylkoSerwis = document.getElementById('apiloSerwisTylko')?.checked ?? true;
+  const res = await window.api.apilo.zamowienia({ tylkoSerwis });
+  if (!res.ok) {
+    el.innerHTML = `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;color:#dc2626;font-size:.85rem">Błąd: ${esc(res.error)}</div>`;
+    return;
+  }
+  if (!res.data.length) {
+    el.innerHTML = `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:10px;padding:20px;text-align:center;color:var(--slate-400);font-size:.85rem">
+      ${tylkoSerwis ? 'Brak zamówień oznaczonych „serwis" — odznacz filtr, żeby zobaczyć wszystkie ostatnie' : 'Brak zamówień w Apilo'}
+    </div>`;
+    return;
+  }
+  window._apiloOrders = res.data;
+  el.innerHTML = res.data.map((o, idx) => {
+    const items = (o.produkty || []).map(i => `<span style="font-size:.8rem;color:var(--slate-600)">${esc(i.nazwa)} ×${i.ilosc}</span>`).join('<br>')
+      || '<span style="font-size:.8rem;color:var(--slate-400)">brak listy produktów</span>';
+    const serwisBadge = o.ma_serwis
+      ? ' <span style="font-size:.7rem;background:#dcfce7;color:#15803d;border-radius:100px;padding:2px 8px;font-weight:800">SERWIS</span>' : '';
+    return `<div style="background:var(--surface);border:1px solid var(--slate-200);border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:1.6rem;flex-shrink:0">📮</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:.95rem;margin-bottom:2px">${esc(o.klient_nazwa || '—')}${serwisBadge}</div>
+        <div style="font-size:.8rem;color:var(--slate-500);margin-bottom:4px">
+          ${o.klient_telefon ? `📞 <b>${esc(o.klient_telefon)}</b>` : '<span style="color:#dc2626">brak telefonu</span>'}${o.klient_email ? ' · ' + esc(o.klient_email) : ''}
+        </div>
+        <div style="margin-bottom:6px">${items}</div>
+        <div style="font-size:.78rem;color:var(--slate-400)">#${esc(o.apilo_order_nr)}${o.created ? ' · ' + esc(String(o.created).slice(0, 10)) : ''}</div>
+      </div>
+      <button onclick="apiloDoWarsztatu(${idx})" class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
+        🔧 Wyślij do warsztatu
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function apiloDoWarsztatu(idx) {
+  const o = (window._apiloOrders || [])[idx];
+  if (!o) return;
+  const res = await window.api.apilo.doWarsztatu(o).catch(() => ({}));
+  if (res.numer) {
+    if (res.existing) {
+      toast(`To zamówienie ma już zlecenie ${res.numer}`, 'warning');
+    } else {
+      toast(`Zlecenie ${res.numer} utworzone dla ${o.klient_nazwa || 'klienta z Apilo'}`);
+    }
+    navigate('lista');
+  } else {
+    toast('Błąd tworzenia zlecenia', 'error');
+  }
+}
+
+// Jedno kliknięcie: wszystkie oczekujące pozycje sklepu → zamówione
+async function sklepZamowWszystko() {
+  const r = await window.api.sklep.zamowWszystkie().catch(() => ({ ok: false, error: 'Błąd połączenia' }));
+  if (r.ok) toast(`✓ Zamówione: ${r.pozycje} pozycji, razem ${r.sztuki} szt.`);
+  else toast(r.error || 'Nie udało się oznaczyć zamówień', 'error');
+  renderSklep();
+}
+
+async function odswiezShoper() {
+  const el = document.getElementById('shoperOrders');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--slate-400);font-size:.82rem;text-align:center;padding:20px">Ładowanie...</div>';
+  const res = await window.api.shoper.zamowienia();
+  if (!res.ok) {
+    el.innerHTML = `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;color:#dc2626;font-size:.85rem">Błąd: ${esc(res.error)}</div>`;
+    return;
+  }
+  if (!res.data.length) {
+    el.innerHTML = '<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:10px;padding:20px;text-align:center;color:var(--slate-400);font-size:.85rem">Brak zamówień w sklepie</div>';
+    return;
+  }
+  window._shoperOrders = res.data;
+  el.innerHTML = res.data.map((o, idx) => {
+    const items = o.items.map(i => `<span style="font-size:.8rem;color:var(--slate-600)">${esc(i.name)} ×${i.qty}</span>`).join('<br>')
+      || '<span style="font-size:.8rem;color:var(--slate-400)">brak listy produktów</span>';
+    const oplacone = parseFloat(o.paid) > 0
+      ? ' <span style="font-size:.7rem;background:#dcfce7;color:#15803d;border-radius:100px;padding:2px 8px;font-weight:800">OPŁACONE</span>' : '';
+    return `<div style="background:var(--surface);border:1px solid var(--slate-200);border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:1.6rem;flex-shrink:0">🏪</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:.95rem;margin-bottom:2px">${esc(o.buyer_name)}${oplacone}</div>
+        <div style="font-size:.8rem;color:var(--slate-500);margin-bottom:4px">${esc(o.buyer_email)}${o.buyer_phone ? ' · ' + esc(o.buyer_phone) : ''}</div>
+        <div style="margin-bottom:6px">${items}</div>
+        <div style="font-size:.78rem;color:var(--slate-400)">Wartość: ${esc(o.total)} ${esc(o.currency)} · #${esc(o.id)}${o.date ? ' · ' + esc(o.date) : ''}</div>
+      </div>
+      <button onclick="shoperDoWarsztatu(${idx})" class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
+        🔧 Wyślij do warsztatu
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function shoperDoWarsztatu(idx) {
+  const o = (window._shoperOrders || [])[idx];
+  if (!o) return;
+  const res = await window.api.shoper.doWarsztatu(o).catch(() => ({}));
+  if (res.numer) {
+    if (res.existing) {
+      toast(`To zamówienie ma już zlecenie ${res.numer}`, 'warning');
+    } else {
+      toast(`Zlecenie ${res.numer} utworzone dla ${o.buyer_name}`);
+    }
+    navigate('lista');
+  } else {
+    toast('Błąd tworzenia zlecenia', 'error');
+  }
+}
+
 async function zamowCzescDesktop(zlecenieId) {
   const nazwa = (document.getElementById('zam-n')?.value || '').trim();
   if (!nazwa) { document.getElementById('zam-n')?.focus(); toast('Wpisz nazwę części', 'error'); return; }
@@ -1566,7 +2152,17 @@ async function sklepWyslijEmail() {
 
 // ── Settings ───────────────────────────────────────────────────────────
 
+function switchSettingsTab(name, btn) {
+  document.querySelectorAll('#settingsModal .settings-tab-panel').forEach(p =>
+    p.classList.toggle('d-none', p.id !== 'stab-' + name));
+  document.querySelectorAll('#settingsModal .settings-tab').forEach(b =>
+    b.classList.toggle('active', b === btn));
+}
+
 async function openSettings() {
+  if (window.api.log) window.api.log('Otwarto ustawienia').catch(() => {});
+  // zawsze startuj od pierwszej zakładki
+  switchSettingsTab('email', document.querySelector('#settingsModal .settings-tab'));
   const s = await window.api.settings.pobierz();
   if (window.api.update) {
     window.api.update.wersja().then(v => {
@@ -1580,6 +2176,10 @@ async function openSettings() {
   document.getElementById('set-smtp-port').value  = s.smtp_port  || 587;
   document.getElementById('set-public-url').value = s.public_url || '';
   document.getElementById('set-cloud-key').value  = s.cloud_api_key || '';
+  document.getElementById('set-supabase-url').value = s.supabase_url || '';
+  document.getElementById('set-supabase-key').value = s.supabase_key || '';
+  const sbBar = document.getElementById('supabaseStatusBar');
+  if (sbBar) sbBar.style.display = (s.supabase_url && s.supabase_key) ? 'flex' : 'none';
   document.getElementById('set-apilo-url').value    = s.apilo_url    || '';
   document.getElementById('set-apilo-id').value     = s.apilo_client_id     || '';
   document.getElementById('set-apilo-secret').value = s.apilo_client_secret || '';
@@ -1591,8 +2191,15 @@ async function openSettings() {
   const alTxt = document.getElementById('allegroStatusText');
   if (alBar) alBar.style.display = allegroSt.connected ? 'flex' : 'none';
   if (alTxt && allegroSt.connected) alTxt.textContent = `Połączono z Allegro${allegroSt.expires ? ' · token ważny do ' + allegroSt.expires : ''}`;
-  document.getElementById('set-shoper-url').value = s.shoper_url || '';
-  document.getElementById('set-shoper-key').value = s.shoper_api_key || '';
+  document.getElementById('set-shoper-url').value   = s.shoper_url   || '';
+  document.getElementById('set-shoper-login').value = s.shoper_login || '';
+  document.getElementById('set-shoper-haslo').value = s.shoper_haslo || '';
+  // Shoper status
+  const shoperSt = await window.api.shoper.status().catch(() => ({ connected: false }));
+  const shBar = document.getElementById('shoperStatusBar');
+  const shTxt = document.getElementById('shoperStatusText');
+  if (shBar) shBar.style.display = shoperSt.connected ? 'flex' : 'none';
+  if (shTxt && shoperSt.connected) shTxt.textContent = 'Połączono z Shoperem — zamówienia w zakładce Sklep';
   document.getElementById('set-shop-email-to').value = s.shop_email_to || '';
   // Show connection status
   const status = await window.api.apilo.status();
@@ -1723,13 +2330,16 @@ async function saveSettings() {
     smtp_port:  parseInt(document.getElementById('set-smtp-port').value) || 587,
     public_url: document.getElementById('set-public-url').value.trim().replace(/\/$/, ''),
     cloud_api_key: document.getElementById('set-cloud-key').value.trim(),
+    supabase_url: document.getElementById('set-supabase-url').value.trim().replace(/\/$/, ''),
+    supabase_key: document.getElementById('set-supabase-key').value.trim(),
     apilo_url:           document.getElementById('set-apilo-url').value.trim().replace(/\/$/, ''),
     apilo_client_id:     document.getElementById('set-apilo-id').value.trim(),
     apilo_client_secret: document.getElementById('set-apilo-secret').value.trim(),
     allegro_client_id:     document.getElementById('set-allegro-id').value.trim(),
     allegro_client_secret: document.getElementById('set-allegro-secret').value.trim(),
     shoper_url:    document.getElementById('set-shoper-url').value.trim().replace(/\/$/, ''),
-    shoper_api_key: document.getElementById('set-shoper-key').value.trim(),
+    shoper_login:  document.getElementById('set-shoper-login').value.trim(),
+    shoper_haslo:  document.getElementById('set-shoper-haslo').value,
     shop_email_to: document.getElementById('set-shop-email-to').value.trim(),
   });
   closeSettings();

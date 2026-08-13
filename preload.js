@@ -1,11 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  log: (msg) => ipcRenderer.invoke('log:ui', msg),
   zlecenia: {
     lista:     (p)    => ipcRenderer.invoke('zlecenia:lista', p),
     pobierz:   (id)   => ipcRenderer.invoke('zlecenia:pobierz', id),
     dodaj:     (data) => ipcRenderer.invoke('zlecenia:dodaj', data),
     aktualizuj:(data) => ipcRenderer.invoke('zlecenia:aktualizuj', data),
+    przejmij:  (data) => ipcRenderer.invoke('zlecenia:przejmij', data),
     usun:      (id)   => ipcRenderer.invoke('zlecenia:usun', id),
   },
   czesci: {
@@ -18,7 +20,16 @@ contextBridge.exposeInMainWorld('api', {
     usun:  (id)   => ipcRenderer.invoke('mechanicy:usun', id),
   },
   statystyki: {
-    pobierz: () => ipcRenderer.invoke('statystyki:pobierz'),
+    pobierz:      () => ipcRenderer.invoke('statystyki:pobierz'),
+    szczegolowe:  () => ipcRenderer.invoke('statystyki:szczegolowe'),
+  },
+  chmura: {
+    test:         () => ipcRenderer.invoke('chmura:test'),
+    pobierzTeraz: () => ipcRenderer.invoke('chmura:pobierz-teraz'),
+  },
+  slownik: {
+    pobierz: ()                    => ipcRenderer.invoke('slownik:pobierz'),
+    ukryj:   (kategoria, wartosc)  => ipcRenderer.invoke('slownik:ukryj', kategoria, wartosc),
   },
   podglad: {
     numer: () => ipcRenderer.invoke('podglad:numer'),
@@ -66,9 +77,11 @@ contextBridge.exposeInMainWorld('api', {
     test:   ()   => ipcRenderer.invoke('email:test'),
   },
   apilo: {
-    polacz: (authCode) => ipcRenderer.invoke('apilo:polacz', authCode),
-    status: ()         => ipcRenderer.invoke('apilo:status'),
-    szukaj: (orderNr)  => ipcRenderer.invoke('apilo:szukaj', orderNr),
+    polacz:      (authCode) => ipcRenderer.invoke('apilo:polacz', authCode),
+    status:      ()         => ipcRenderer.invoke('apilo:status'),
+    szukaj:      (orderNr)  => ipcRenderer.invoke('apilo:szukaj', orderNr),
+    zamowienia:  (opts)     => ipcRenderer.invoke('apilo:zamowienia', opts),
+    doWarsztatu: (o)        => ipcRenderer.invoke('apilo:do-warsztatu', o),
   },
   etykieta: {
     drukuj: (id) => ipcRenderer.invoke('etykieta:drukuj', id),
@@ -94,11 +107,18 @@ contextBridge.exposeInMainWorld('api', {
     aktualizuj:   (data) => ipcRenderer.invoke('sklep:aktualizuj', data),
     usun:         (id)   => ipcRenderer.invoke('sklep:usun', id),
     wyslijEmail:  ()     => ipcRenderer.invoke('sklep:wyslij-email'),
+    zamowWszystkie: ()   => ipcRenderer.invoke('sklep:zamow-wszystkie'),
   },
   allegro: {
     connect:     ()      => ipcRenderer.invoke('allegro:connect'),
     status:      ()      => ipcRenderer.invoke('allegro:status'),
     zamowienia:  ()      => ipcRenderer.invoke('allegro:zamowienia'),
     doWarsztatu: (form)  => ipcRenderer.invoke('allegro:do-warsztatu', form),
+  },
+  shoper: {
+    status:      ()  => ipcRenderer.invoke('shoper:status'),
+    test:        ()  => ipcRenderer.invoke('shoper:test'),
+    zamowienia:  ()  => ipcRenderer.invoke('shoper:zamowienia'),
+    doWarsztatu: (o) => ipcRenderer.invoke('shoper:do-warsztatu', o),
   },
 });
