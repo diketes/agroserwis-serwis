@@ -26,18 +26,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Ponawiamy — electron-builder czasem nie dociągnie narzędzi z sieci przy 1. próbie
       - name: Build Windows installer + portable
         shell: pwsh
         run: |
-          $ok = $false
-          for ($i = 1; $i -le 3; $i++) {
-            Write-Host "Build — próba $i/3"
-            npx electron-builder --win --x64
-            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
-            Start-Sleep -Seconds 15
-          }
-          if (-not $ok) { throw "Build nie powiódł się po 3 próbach" }
+          $env:DEBUG = "electron-builder"
+          npx electron-builder --win --x64 *>&1 | Tee-Object -FilePath build.log
+          exit $LASTEXITCODE
+
+      # Diagnostyka: przy błędzie wypchnij log builda na osobną gałąź do odczytu
+      - name: Log przy błędzie
+        if: failure()
+        shell: pwsh
+        run: |
+          git config user.name "ci"
+          git config user.email "ci@agroserwis"
+          $b = "cilog-${{ github.run_id }}"
+          git checkout -b $b
+          git add -f build.log
+          git commit -m "log builda ${{ github.run_id }}"
+          git push origin $b
 
       - name: Publish release with installers
         uses: softprops/action-gh-release@v2
