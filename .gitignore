@@ -3,3 +3,4 @@ dist/
 build/icon.png
 build/icon_source.png
 *.log
+supabase/.temp/
