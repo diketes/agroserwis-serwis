@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status naprawy — Agroserwis Nysa</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f1f5f9;min-height:100vh;padding:24px 14px}
+  .karta{max-width:480px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);overflow:hidden}
+  .top{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:24px;text-align:center}
+  .top .logo{font-size:1.8rem}.top h1{font-size:1.05rem;font-weight:900;margin-top:4px}
+  .body{padding:22px}
+  .numer{font-family:monospace;font-size:1.35rem;font-weight:900;color:#16a34a;text-align:center;margin-bottom:14px}
+  .status{padding:14px;border-radius:12px;text-align:center;font-weight:900;font-size:1.05rem;margin-bottom:18px}
+  .wiersz{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:.9rem}
+  .wiersz span:first-child{color:#64748b}.wiersz span:last-child{font-weight:700;color:#1e293b}
+  .lad{text-align:center;color:#94a3b8;padding:40px 0}
+</style></head><body>
+<div class="karta">
+  <div class="top"><div class="logo">⚙️</div><h1>Agroserwis Nysa — status naprawy</h1></div>
+  <div class="body" id="tresc"><div class="lad">Ładowanie...</div></div>
+</div>
+<script>
+const API = 'https://jjvuwpaegfgitlvqbdjb.supabase.co/functions/v1/serwis';
+const KOLORY = {'Przyjęto':['#dbeafe','#1d4ed8'],'W naprawie':['#fef3c7','#854d0e'],'Czeka na części':['#ffedd5','#9a3412'],'Gotowe':['#dcfce7','#15803d'],'Wydano':['#e2e8f0','#475569']};
+const d = s => s ? new Date(s).toLocaleDateString('pl-PL') : '—';
+const e = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const token = (location.hash || location.search).replace(/^[#?]/,'').replace(/^token=/,'').replace(/[^a-f0-9]/g,'');
+fetch(API + '/api/sledz/' + token).then(r => { if(!r.ok) throw 0; return r.json(); }).then(z => {
+  const k = KOLORY[z.status] || KOLORY['Przyjęto'];
+  document.getElementById('tresc').innerHTML =
+    '<div class="numer">' + e(z.numer) + '</div>' +
+    '<div class="status" style="background:' + k[0] + ';color:' + k[1] + '">' + e(z.status) + '</div>' +
+    (z.klient_imie ? '<div class="wiersz"><span>Klient</span><span>' + e(z.klient_imie) + '</span></div>' : '') +
+    '<div class="wiersz"><span>Sprzęt</span><span>' + (e([z.marka, z.model].filter(Boolean).join(' ')) || '—') + '</span></div>' +
+    (z.nr_seryjny ? '<div class="wiersz"><span>Nr seryjny</span><span>' + e(z.nr_seryjny) + '</span></div>' : '') +
+    '<div class="wiersz"><span>Przyjęto</span><span>' + d(z.data_przyjecia) + '</span></div>' +
+    '<div class="wiersz"><span>Gotowe</span><span>' + d(z.data_gotowosci) + '</span></div>' +
+    '<div class="wiersz"><span>Wydano</span><span>' + d(z.data_wydania) + '</span></div>' +
+    (z.koszt_calkowity ? '<div class="wiersz"><span>Koszt</span><span>' + Number(z.koszt_calkowity).toFixed(2) + ' zł</span></div>' : '');
+}).catch(() => {
+  document.getElementById('tresc').innerHTML = '<div class="lad">Nie znaleziono zlecenia</div>';
+});
+</script></body></html>

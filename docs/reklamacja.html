@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reklamacja / naprawa — Agroserwis Nysa</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f1f5f9;min-height:100vh;padding:24px 14px}
+  .karta{max-width:520px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);overflow:hidden}
+  .naglowek{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;padding:26px 24px;text-align:center}
+  .naglowek .logo{font-size:2rem;margin-bottom:6px}.naglowek h1{font-size:1.2rem;font-weight:900}
+  .naglowek p{font-size:.82rem;color:rgba(255,255,255,.75);margin-top:4px}
+  form{padding:22px}
+  label{display:block;font-size:.78rem;font-weight:700;color:#475569;margin:12px 0 4px}
+  label .req{color:#dc2626}
+  input,textarea{width:100%;padding:11px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:.95rem;font-family:inherit}
+  input:focus,textarea:focus{outline:none;border-color:#16a34a}
+  .rzad{display:flex;gap:10px}.rzad>div{flex:1}
+  button{width:100%;margin-top:18px;padding:15px;border:none;border-radius:12px;background:#16a34a;color:#fff;font-size:1.05rem;font-weight:900;cursor:pointer}
+  button:disabled{opacity:.6}
+  .stopka{text-align:center;font-size:.75rem;color:#94a3b8;padding:0 22px 22px}
+  #wynik{display:none;padding:34px 24px;text-align:center}
+  #wynik .ikona{font-size:3rem;margin-bottom:10px}#wynik h2{font-size:1.15rem;color:#15803d;margin-bottom:8px}
+  #wynik p{font-size:.9rem;color:#475569;line-height:1.6}
+  #wynik .numer{font-family:monospace;font-size:1.2rem;font-weight:900;color:#16a34a;display:block;margin:10px 0}
+  #wynik a{display:inline-block;margin-top:14px;background:#16a34a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:100px;font-weight:800}
+  #blad{display:none;margin-top:12px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:10px;padding:10px;font-size:.85rem;text-align:center}
+  .hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}
+</style></head><body>
+<div class="karta">
+  <div class="naglowek"><div class="logo">⚙️</div><h1>Agroserwis Nysa — zgłoszenie naprawy</h1>
+  <p>Wypełnij formularz — przyjmiemy Twój sprzęt do serwisu i dostaniesz link do śledzenia naprawy</p></div>
+  <form id="formularz">
+    <label>Imię i nazwisko <span class="req">*</span></label>
+    <input name="klient_nazwa" required maxlength="120" placeholder="Jan Kowalski">
+    <div class="rzad">
+      <div><label>Telefon</label><input name="klient_telefon" type="tel" maxlength="30" placeholder="500 000 000"></div>
+      <div><label>E-mail</label><input name="klient_email" type="email" maxlength="120" placeholder="jan@email.com"></div>
+    </div>
+    <div class="rzad">
+      <div><label>Marka sprzętu</label><input name="marka" maxlength="60" placeholder="np. VENOM"></div>
+      <div><label>Model</label><input name="model" maxlength="60" placeholder="np. GS-460"></div>
+    </div>
+    <label>Nr seryjny (jeśli znasz)</label>
+    <input name="nr_seryjny" maxlength="60" placeholder="z tabliczki znamionowej">
+    <label>Opis usterki <span class="req">*</span></label>
+    <textarea name="opis_usterki" required rows="4" maxlength="2000" placeholder="Opisz, co się dzieje ze sprzętem..."></textarea>
+    <div class="hp"><label>Firma</label><input name="firma" tabindex="-1" autocomplete="off"></div>
+    <button type="submit" id="wyslij">Wyślij zgłoszenie</button>
+    <div id="blad"></div>
+  </form>
+  <div class="stopka">Agroserwis Nysa · ul. Dmowskiego 2, 48-303 Nysa · tel. 880 109 005</div>
+  <div id="wynik">
+    <div class="ikona">✅</div><h2>Zgłoszenie przyjęte!</h2>
+    <p>Twój numer zgłoszenia:<span class="numer" id="wynikNumer"></span>
+    Skontaktujemy się w sprawie dostarczenia sprzętu.<br>Postęp naprawy możesz śledzić na bieżąco:</p>
+    <a id="wynikLink" href="#">🔍 Śledź naprawę</a>
+  </div>
+</div>
+<script>
+const API = 'https://jjvuwpaegfgitlvqbdjb.supabase.co/functions/v1/serwis';
+const STRONY = location.origin + location.pathname.replace(/reklamacja\.html$/, '');
+document.getElementById('formularz').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const f = ev.target, btn = document.getElementById('wyslij'), blad = document.getElementById('blad');
+  blad.style.display = 'none'; btn.disabled = true; btn.textContent = 'Wysyłanie...';
+  const dane = {}; new FormData(f).forEach((v, k) => { dane[k] = v; });
+  try {
+    const r = await fetch(API + '/api/reklamacja', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dane) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Błąd wysyłania');
+    f.style.display = 'none';
+    document.getElementById('wynikNumer').textContent = j.numer;
+    const a = document.getElementById('wynikLink');
+    // link śledzenia = strona na GitHub Pages z tokenem
+    if (j.token) a.href = STRONY + 'sledz.html#' + j.token; else a.style.display = 'none';
+    document.getElementById('wynik').style.display = 'block';
+  } catch (e) {
+    blad.textContent = e.message || 'Nie udało się wysłać — spróbuj ponownie';
+    blad.style.display = 'block'; btn.disabled = false; btn.textContent = 'Wyślij zgłoszenie';
+  }
+});
+</script></body></html>

@@ -22,10 +22,17 @@ const CORS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
-const html = (body: string, status = 200) =>
-  new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8", ...CORS } });
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...CORS } });
+// Content-Type ustawiany przez obiekt Headers i JAWNIE na końcu — inaczej
+// brama Supabase potrafi podać stronę jako text/plain (telefon pokazuje kod)
+function odpowiedz(body: string, ctype: string, status: number): Response {
+  const h = new Headers();
+  for (const [k, v] of Object.entries(CORS)) h.set(k, v);
+  h.set("Content-Type", ctype);
+  h.set("X-Content-Type-Options", "nosniff");
+  return new Response(body, { status, headers: h });
+}
+const html = (body: string, status = 200) => odpowiedz(body, "text/html; charset=utf-8", status);
+const json = (data: unknown, status = 200) => odpowiedz(JSON.stringify(data), "application/json; charset=utf-8", status);
 
 // prosty limit zgłoszeń per IP (best-effort, pamięć instancji)
 const ipMapa = new Map<string, number[]>();
@@ -106,7 +113,8 @@ Deno.serve(async (req) => {
     });
     if (error) return json({ ok: false, error: "Błąd zapisu — spróbuj ponownie" }, 500);
     const { data: z } = await sb.from("zlecenia").select("numer").eq("token", token).single();
-    return json({ ok: true, numer: z?.numer, tracking_url: `${bazaAbs}/sledz/${token}` }, 201);
+    // token wraca do strony (GitHub Pages), żeby zbudować link „Śledź naprawę"
+    return json({ ok: true, numer: z?.numer, token, tracking_url: `${bazaAbs}/sledz/${token}` }, 201);
   }
 
   // ── strona zdjęć telefonem ──
